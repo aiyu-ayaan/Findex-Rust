@@ -1,4 +1,6 @@
 //! Linux platform layer. Only this crate (and `findex-platform-win`) may call OS-specific APIs.
+//! Compiles to nothing on other targets.
+#![cfg(target_os = "linux")]
 
 mod default_handler;
 mod drives;
