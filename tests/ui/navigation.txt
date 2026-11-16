@@ -1,0 +1,77 @@
+# Keyboard and mouse navigation, selection, natural sort, type-ahead, history, hidden files, sorting.
+# Layout at 1280x800 with the details pane off: header y=154, row i centre y=187+32*i.
+resize 1280 800
+expect rows 17
+key Down
+expect selection 1 item selected
+expect details Alpha
+key shift+Down
+expect selection 2 items selected
+key ctrl+a
+expect selection 17 items selected
+key Escape
+key Home
+expect details Alpha
+# natural sort: file2 comes before file10
+type f
+expect details file2.txt
+wait 1100
+type f
+expect details file10.txt
+# Enter opens a folder, Backspace and Alt+arrows walk history
+key Home
+key Return
+expect title Alpha
+expect status 0 items
+snap 20-empty-folder
+key Backspace
+expect title findex-ui-fixture
+key alt+Right
+expect title Alpha
+key alt+Up
+expect title findex-ui-fixture
+expect details Alpha
+# mouse: click selects, ctrl+click adds, double-click opens
+click 400 219
+expect details Beta
+click 400 251 ctrl
+expect selection 2 items selected
+dblclick 400 219
+expect title Beta
+expect rows 1
+key alt+Left
+expect title findex-ui-fixture
+# hidden items
+key ctrl+h
+expect rows 18
+key ctrl+h
+expect rows 17
+# sort by size (header click): folders stay first, then smallest file; click again for largest first
+click 1240 154
+key Home
+key Down
+key Down
+key Down
+key Down
+expect details file2.txt
+click 1240 154
+key Home
+key Down
+key Down
+key Down
+key Down
+expect details movie.mkv
+click 276 154
+# breadcrumb: click "Home"
+click 205 60
+expect title Home
+key alt+Left
+# address bar: type a path
+key ctrl+l
+key ctrl+a
+type ~/.cache/findex-ui-fixture/Gamma/Deep
+key Return
+expect title Deep
+expect crumbs Gamma > Deep
+key alt+Left
+expect title findex-ui-fixture

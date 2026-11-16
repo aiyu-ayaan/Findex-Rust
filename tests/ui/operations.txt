@@ -1,0 +1,76 @@
+# New folder + rename dialog, copy/paste with keep-both naming, undo, trash, permanent delete, move.
+resize 1280 800
+expect rows 17
+# New folder opens the rename dialog with "New folder" selected
+key ctrl+shift+n
+expect rows 18
+expect details New folder
+wait 300
+snap 30-rename-dialog
+key ctrl+a
+type Reports
+key Return
+expect details Reports
+expect rows 18
+# F2 rename and undo (Ctrl+Z)
+key F2
+wait 200
+key ctrl+a
+type Reports 2026
+key Return
+expect details Reports 2026
+key ctrl+z
+expect details Reports
+# copy + paste a file: keeps both as "notes - Copy.txt"
+key Home
+type notes
+key ctrl+c
+key ctrl+v
+expect toast Copied 1 item
+expect rows 19
+expect details notes - Copy.txt
+# undo the copy (moves the copy to Trash)
+key ctrl+z
+expect rows 18
+# Delete moves to Trash with an Undo toast
+key Home
+type notes
+key Delete
+expect toast Moved 1 item to Trash
+expect rows 17
+snap 31-trash-toast
+key ctrl+z
+expect rows 18
+# Shift+Delete asks first; Escape cancels
+key Home
+type reports
+key shift+Delete
+wait 300
+snap 32-delete-dialog
+key Escape
+expect rows 18
+# confirm via the Delete button
+key shift+Delete
+wait 300
+snap 33-before-confirm
+click 704 457
+wait 300
+snap 34-after-confirm
+expect toast Deleted 1 item
+expect rows 17
+# cut + paste moves into a folder
+key Home
+type main.rs
+expect details main.rs
+key ctrl+x
+snap 35-after-cut
+key Home
+expect details Alpha
+snap 36-after-home
+key Return
+expect title Alpha
+key ctrl+v
+expect toast Moved 1 item
+expect rows 1
+key alt+Left
+expect rows 16

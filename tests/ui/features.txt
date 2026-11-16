@@ -1,0 +1,44 @@
+# Transfers in their own window (progress, graph, pause/resume), fuzzy search, tabs, This PC, menus, settings.
+resize 1280 800
+expect rows 17
+# --- copy a 2 GB file: the transfer window opens by itself
+key Home
+key Down
+key Return
+expect title Beta
+key Down
+key ctrl+c
+key alt+Left
+expect title findex-ui-fixture
+key ctrl+v
+expect jobs 1
+expect transfer-window true
+wait 1200
+tsnap 40-transfer-window
+wait 100
+tsnap 40b
+wait 100
+tsnap 40c
+wait 100
+tsnap 40d
+# pause (first icon button in the job header), check it stays paused, resume
+tclick 441 107
+expect job Paused
+wait 1200
+tsnap 41-transfer-paused
+expect job Paused
+tclick 441 107
+expect job complete
+wait 1000
+tsnap 42-transfer-resumed
+wait-jobs
+tsnap 43-transfer-done
+expect toast Copied 1 item
+expect details big.bin
+# the auto-opened window closes itself when everything is done
+expect transfer-window false
+# clean up the 2 GB copy for good (Shift+Delete, confirm)
+key shift+Delete
+wait 300
+click 704 457
+expect toast Deleted 1 item

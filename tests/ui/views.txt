@@ -1,0 +1,28 @@
+# Every view mode renders the fixture (thumbnails in icon views).
+resize 1280 800
+expect rows 17
+expect status 17 items
+expect crumbs findex-ui-fixture
+snap 00-details
+key ctrl+shift+1
+expect view 0
+wait 800
+snap 01-xl-icons
+key ctrl+shift+2
+wait 500
+snap 02-large-icons
+key ctrl+shift+3
+wait 300
+snap 03-medium-icons
+key ctrl+shift+4
+snap 04-small-icons
+key ctrl+shift+5
+snap 05-list
+key ctrl+shift+7
+wait 300
+snap 07-tiles
+key ctrl+shift+8
+wait 300
+snap 08-content
+key ctrl+shift+6
+expect view 5
