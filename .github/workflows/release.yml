@@ -1,0 +1,324 @@
+# Automated release, driven by a marker at the START of a commit subject on master.
+# Same flow as Domus. Rules: development/docs/09-release.md. Version maths: scripts/release-version.mjs.
+#
+#   !alpha  (nothing released) -> 0.0.1-alpha.1     !fix    1.4.2 -> 1.4.3
+#   !alpha  0.0.1-alpha.1      -> 0.0.1-alpha.2     !feat   1.4.2 -> 1.5.0
+#   !beta   0.0.1-alpha.3      -> 0.0.1-beta.1      !major  1.4.2 -> 2.0.0
+#   !stable 0.0.1-beta.2       -> 0.0.1             !patch  rebuild the released version in place
+#
+# A scope of platform names limits what is built: !alpha(linux), !fix(windows).
+#
+# Two steps:
+#   1. A marker on master opens a release PR: the version in Cargo.toml is bumped and a CHANGELOG
+#      entry written. Nothing is built.
+#   2. Merging that PR releases: Linux AppImage and .deb (logo included), the Windows build,
+#      then the tag and the GitHub Release.
+#
+# The Linux job installs the AppImage it just built with scripts/install-linux.sh and checks the
+# menu entry and logo land, so a release that would show a blank icon fails here, not for a user.
+# Run the workflow by hand with mode `release` to retry a release.
+
+name: Release
+
+on:
+  push:
+    branches: [master]
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: 'pr = open the release PR; release = build and publish the version master carries; patch = rebuild that version in place'
+        required: true
+        default: pr
+        type: choice
+        options: [pr, release, patch]
+      marker:
+        description: 'Release type (pr mode only)'
+        default: alpha
+        type: choice
+        options: [alpha, beta, stable, fix, feat, major]
+      targets:
+        description: 'What to build (pr and patch modes): all, or any of linux,windows'
+        default: all
+        type: string
+
+permissions:
+  contents: write
+  pull-requests: write
+  actions: write # delete the build artifacts once they are published
+
+# Never two at once: the second would compute its version from a state the first is changing.
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  plan:
+    name: Plan
+    runs-on: ubuntu-latest
+    outputs:
+      mode: ${{ steps.plan.outputs.mode }}
+      marker: ${{ steps.plan.outputs.marker }}
+      version: ${{ steps.plan.outputs.version }}
+      previous: ${{ steps.plan.outputs.previous }}
+      targets: ${{ steps.plan.outputs.targets }}
+      channel: ${{ steps.plan.outputs.channel }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: node scripts/release-version.mjs --check
+
+      - name: Plan
+        id: plan
+        env:
+          EVENT: ${{ github.event_name }}
+          MODE: ${{ inputs.mode }}
+          MARKER: ${{ inputs.marker }}
+          INPUT_TARGETS: ${{ inputs.targets }}
+          BEFORE_SHA: ${{ github.event.before }}
+        run: |
+          # The workspace version: the release PR always changes it, a normal commit never does.
+          version_of() { sed -n '/^\[workspace.package\]/,/^\[/s/^version = "\(.*\)"/\1/p'; }
+          current="$(version_of < Cargo.toml)"
+          # The last release, or 0.0.0 when there is none: the first !alpha is then 0.0.1-alpha.1.
+          previous="$(git describe --tags --abbrev=0 --match 'v*' 2>/dev/null || true)"
+          previous="${previous#v}"
+          scope="$(printf '%s' "${INPUT_TARGETS:-all}" | tr -d ' ')"
+
+          # Every subject pushed, not just the head commit.
+          if [ "$EVENT" = workflow_dispatch ]; then
+            echo "!$([ "$MODE" = patch ] && echo patch || echo "$MARKER")(${scope}): manual" > subjects.txt
+          elif [ -n "$(echo "$BEFORE_SHA" | tr -d 0)" ] && git cat-file -e "$BEFORE_SHA^{commit}" 2>/dev/null; then
+            git log "$BEFORE_SHA..$GITHUB_SHA" --format=%s > subjects.txt
+          else
+            git log -1 --format=%s > subjects.txt
+          fi
+          cat subjects.txt
+          plan="$(node scripts/release-version.mjs --current "${previous:-0.0.0}" --subjects-file subjects.txt)"
+          field() { printf '%s\n' "$plan" | sed -n "s/^$1=//p"; }
+
+          if [ "$EVENT" = workflow_dispatch ] && [ "$MODE" = release ]; then
+            mode=release
+          elif [ "$EVENT" = push ] && [ "$(git show HEAD^:Cargo.toml | version_of)" != "$current" ]; then
+            mode=release # the release PR was merged
+          elif [ "$(field marker)" = patch ]; then
+            mode=patch
+          elif [ "$(field release)" = true ]; then
+            mode=pr
+          else
+            mode=none
+          fi
+
+          case "$mode" in
+            pr)
+              version="$(field version)"
+              targets="$(field targets)" ;;
+            release)
+              version="$current"
+              targets="$(tr -d '[:space:]' < .github/release-targets 2>/dev/null || true)" ;;
+            patch)
+              version="$previous"
+              targets="$(field targets)"
+              [ -n "$previous" ] || { echo "::error::Nothing has been released yet; !patch has nothing to rebuild."; exit 1; }
+              [ "$previous" = "$current" ] || { echo "::error::master carries $current but the last release is $previous."; exit 1; } ;;
+          esac
+          case "${version:-}" in
+            *-alpha.*) channel=alpha ;;
+            *-beta.*) channel=beta ;;
+            *) channel=latest ;;
+          esac
+          {
+            echo "mode=$mode"
+            echo "marker=$(field marker)"
+            echo "version=${version:-}"
+            echo "previous=$previous"
+            echo "targets=${targets:-linux,windows}"
+            echo "channel=$channel"
+          } | tee -a "$GITHUB_OUTPUT"
+
+  # --- Step 1: the release PR ------------------------------------------------
+
+  release-pr:
+    name: Release PR for v${{ needs.plan.outputs.version }}
+    needs: plan
+    if: needs.plan.outputs.mode == 'pr'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Bump the version
+        env:
+          VERSION: ${{ needs.plan.outputs.version }}
+        run: node scripts/set-version.mjs "$VERSION"
+
+      # The merge commit says nothing about the marker's scope, so it is written down here.
+      - name: Record what this release builds
+        run: echo "${{ needs.plan.outputs.targets }}" > .github/release-targets
+
+      - name: Write the CHANGELOG entry
+        env:
+          VERSION: ${{ needs.plan.outputs.version }}
+          PREVIOUS: ${{ needs.plan.outputs.previous }}
+        run: |
+          {
+            echo "## v${VERSION} ($(date -u +%Y-%m-%d))"
+            echo
+            git log ${PREVIOUS:+"v${PREVIOUS}..HEAD"} --no-merges --format='- %s' | grep -v '^- chore(release)' || true
+            echo
+            cat CHANGELOG.md 2>/dev/null || true
+          } > CHANGELOG.next.md
+          mv CHANGELOG.next.md CHANGELOG.md
+
+      - name: Open or update the release PR
+        id: pr
+        uses: peter-evans/create-pull-request@v7
+        with:
+          token: ${{ secrets.RELEASE_TOKEN || secrets.GITHUB_TOKEN }}
+          commit-message: 'chore(release): v${{ needs.plan.outputs.version }}'
+          title: 'chore(release): v${{ needs.plan.outputs.version }}'
+          body: |
+            Automated release PR, opened by a `!${{ needs.plan.outputs.marker }}` marker on master.
+
+            | | |
+            | --- | --- |
+            | From | `${{ needs.plan.outputs.previous || 'nothing released yet' }}` |
+            | To | `${{ needs.plan.outputs.version }}` |
+            | Builds | `${{ needs.plan.outputs.targets }}` |
+
+            The CHANGELOG diff is the release note; edit it in this branch if it reads badly.
+
+            **Merging this PR is what releases.** Closing it releases nothing.
+          branch: chore/release-v${{ needs.plan.outputs.version }}
+          base: master
+          delete-branch: true
+
+      - name: Ensure the PR exists
+        if: steps.pr.outputs.pull-request-number == ''
+        run: |
+          echo "::error::No release PR was created. Allow GitHub Actions to create pull requests (Settings > Actions > General) or add a RELEASE_TOKEN secret."
+          exit 1
+
+      - run: echo "Release PR ${{ steps.pr.outputs.pull-request-url }}" >> "$GITHUB_STEP_SUMMARY"
+
+  # --- Step 2: merging that PR is the release --------------------------------
+
+  linux:
+    name: Linux AppImage and .deb
+    needs: plan
+    if: contains(fromJSON('["release","patch"]'), needs.plan.outputs.mode) && contains(needs.plan.outputs.targets, 'linux')
+    # The oldest supported runner: the binary then runs on older glibc too.
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y librsvg2-bin libfontconfig1-dev libxkbcommon-dev libwayland-dev libx11-dev libgl1-mesa-dev
+      - run: cargo build --release --locked -p findex-app
+      - run: scripts/package-linux.sh target/release/findex
+
+      # The installer users run, against the AppImage just built: the menu entry and logo must land.
+      - name: Install it the way a user would
+        run: |
+          sh scripts/install-linux.sh --from-file dist/*.AppImage
+          d="${XDG_DATA_HOME:-$HOME/.local/share}"
+          test -x "$d/findex/Findex.AppImage"
+          grep -q '^MimeType=inode/directory;' "$d/applications/findex.desktop"
+          for s in 16 32 48 256 512; do test -s "$d/icons/hicolor/${s}x${s}/apps/findex.png"; done
+          test -s "$d/icons/hicolor/scalable/apps/findex.svg"
+          sh scripts/install-linux.sh --uninstall
+          test ! -e "$d/applications/findex.desktop"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux
+          path: |
+            dist/*.AppImage
+            dist/*.deb
+          if-no-files-found: error
+          retention-days: 1
+
+  # shortcut: the Windows build has never run on real hardware, so a failure here does not block a
+  # release (continue-on-error); drop that line once a release has shipped a working build.
+  windows:
+    name: Windows build
+    needs: plan
+    if: contains(fromJSON('["release","patch"]'), needs.plan.outputs.mode) && contains(needs.plan.outputs.targets, 'windows')
+    runs-on: windows-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo build --release --locked -p findex-app
+      - name: Package
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force dist | Out-Null
+          Copy-Item target/release/findex.exe dist/
+          Copy-Item assets/brand/app-icon.svg dist/findex.svg
+          Compress-Archive -Path dist/* -DestinationPath "Findex-${{ needs.plan.outputs.version }}-windows-x64.zip"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows
+          path: Findex-*-windows-x64.zip
+          if-no-files-found: error
+          retention-days: 1
+
+  # Last, once everything exists.
+  publish:
+    name: Publish v${{ needs.plan.outputs.version }}
+    needs: [plan, linux, windows]
+    # Skipped builds (a scoped marker) are fine; a failed one is not.
+    if: >-
+      !cancelled() && contains(fromJSON('["release","patch"]'), needs.plan.outputs.mode)
+      && !contains(needs.*.result, 'failure')
+    runs-on: ubuntu-latest
+    env:
+      VERSION: ${{ needs.plan.outputs.version }}
+      CHANNEL: ${{ needs.plan.outputs.channel }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          pattern: '{linux,windows}'
+      - name: Say so when the Windows build is missing
+        if: needs.windows.result != 'skipped' && hashFiles('artifacts/windows/*') == ''
+        run: echo "::warning::The Windows build failed; this release ships without it."
+      - name: GitHub Release
+        run: |
+          files="$(find artifacts/linux artifacts/windows -type f 2>/dev/null || true)"
+          if gh release view "v$VERSION" > /dev/null 2>&1; then
+            # !patch, or a retry: replace the files of the release that exists.
+            [ -z "$files" ] || gh release upload "v$VERSION" $files --clobber
+          else
+            awk -v h="## v$VERSION " 'index($0, h) == 1 { on = 1; next } /^## v/ { on = 0 } on' CHANGELOG.md > notes.md
+            {
+              echo
+              echo "Linux: \`curl -fsSL https://raw.githubusercontent.com/$GITHUB_REPOSITORY/master/scripts/install-linux.sh | sh\`"
+              echo "Built for this release: \`${{ needs.plan.outputs.targets }}\`"
+            } >> notes.md
+            gh release create "v$VERSION" $files --target "$GITHUB_SHA" --title "v$VERSION" --notes-file notes.md \
+              $([ "$CHANNEL" = latest ] && echo --latest || echo --prerelease)
+          fi
+
+      # Everything is in the Release now. GitHub's shortest expiry is a day, so they go here;
+      # a failed release never reaches this step and keeps them that day for the retry.
+      - name: Delete the build artifacts
+        run: |
+          gh api "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/artifacts" --paginate --jq '.artifacts[].id' |
+            xargs -r -I{} gh api -X DELETE "repos/$GITHUB_REPOSITORY/actions/artifacts/{}"
+
+      - run: echo "Released v$VERSION ($CHANNEL) https://github.com/$GITHUB_REPOSITORY/releases/tag/v$VERSION" >> "$GITHUB_STEP_SUMMARY"
