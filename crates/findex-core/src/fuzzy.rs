@@ -14,14 +14,20 @@ impl Fuzzy {
         cfg.prefer_prefix = true;
         Fuzzy {
             matcher: Matcher::new(cfg),
-            pattern: Pattern::new(query, CaseMatching::Smart, Normalization::Smart, AtomKind::Fuzzy),
+            pattern: Pattern::new(
+                query,
+                CaseMatching::Smart,
+                Normalization::Smart,
+                AtomKind::Fuzzy,
+            ),
             buf: Vec::new(),
         }
     }
 
     /// Higher is better. `None` means no match.
     pub fn score(&mut self, name: &str) -> Option<u32> {
-        self.pattern.score(Utf32Str::new(name, &mut self.buf), &mut self.matcher)
+        self.pattern
+            .score(Utf32Str::new(name, &mut self.buf), &mut self.matcher)
     }
 }
 

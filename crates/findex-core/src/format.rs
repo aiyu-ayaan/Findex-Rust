@@ -4,7 +4,7 @@ use chrono::{Local, TimeZone};
 pub fn size(bytes: u64) -> String {
     const UNITS: [&str; 5] = ["KB", "MB", "GB", "TB", "PB"];
     if bytes < 1024 {
-        return format!("{bytes} bytes");
+        return format!("{bytes} byte{}", if bytes == 1 { "" } else { "s" });
     }
     let mut v = bytes as f64 / 1024.0;
     let mut u = 0;
@@ -12,7 +12,11 @@ pub fn size(bytes: u64) -> String {
         v /= 1024.0;
         u += 1;
     }
-    if v < 10.0 { format!("{v:.1} {}", UNITS[u]) } else { format!("{v:.0} {}", UNITS[u]) }
+    if v < 10.0 {
+        format!("{v:.1} {}", UNITS[u])
+    } else {
+        format!("{v:.0} {}", UNITS[u])
+    }
 }
 
 /// Local date and time, or empty when unknown.
@@ -54,6 +58,7 @@ mod tests {
     #[test]
     fn sizes() {
         assert_eq!(size(0), "0 bytes");
+        assert_eq!(size(1), "1 byte");
         assert_eq!(size(1536), "1.5 KB");
         assert_eq!(size(50 * 1024 * 1024), "50 MB");
     }

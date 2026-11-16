@@ -110,9 +110,21 @@ mod tests {
             Entry::new("zdir".into(), true, 0, 0, 0),
             Entry::new("a.txt".into(), false, 9, 0, 0),
         ];
-        let o = sort_order(&e, Sort { key: SortKey::Name, descending: true });
+        let o = sort_order(
+            &e,
+            Sort {
+                key: SortKey::Name,
+                descending: true,
+            },
+        );
         assert_eq!(o, [1, 0, 2]);
-        let o = sort_order(&e, Sort { key: SortKey::Size, descending: false });
+        let o = sort_order(
+            &e,
+            Sort {
+                key: SortKey::Size,
+                descending: false,
+            },
+        );
         assert_eq!(o, [1, 0, 2]);
     }
 }

@@ -28,9 +28,7 @@ impl Kind {
             | "heic" | "heif" | "avif" | "raw" | "cr2" | "nef" | "psd" | "xcf" => Kind::Image,
             "mp4" | "mkv" | "webm" | "avi" | "mov" | "wmv" | "flv" | "m4v" | "mpg" | "mpeg"
             | "3gp" => Kind::Video,
-            "mp3" | "flac" | "wav" | "ogg" | "opus" | "m4a" | "aac" | "wma" | "aiff" => {
-                Kind::Audio
-            }
+            "mp3" | "flac" | "wav" | "ogg" | "opus" | "m4a" | "aac" | "wma" | "aiff" => Kind::Audio,
             "pdf" => Kind::Pdf,
             "doc" | "docx" | "odt" | "rtf" | "txt" | "md" | "xls" | "xlsx" | "ods" | "csv"
             | "ppt" | "pptx" | "odp" | "epub" => Kind::Document,
@@ -93,8 +91,20 @@ impl Entry {
         if name.starts_with('.') {
             flags |= FLAG_HIDDEN;
         }
-        let kind = if is_dir { Kind::Folder } else { Kind::from_name(&name) };
-        Entry { name, raw, parent: None, size, mtime, kind, flags }
+        let kind = if is_dir {
+            Kind::Folder
+        } else {
+            Kind::from_name(&name)
+        };
+        Entry {
+            name,
+            raw,
+            parent: None,
+            size,
+            mtime,
+            kind,
+            flags,
+        }
     }
 
     pub fn is_dir(&self) -> bool {
@@ -111,7 +121,10 @@ impl Entry {
 
     /// Full path, given the folder the listing was made from.
     pub fn path_in(&self, folder: &Path) -> PathBuf {
-        self.parent.as_deref().unwrap_or(folder).join(self.os_name())
+        self.parent
+            .as_deref()
+            .unwrap_or(folder)
+            .join(self.os_name())
     }
 }
 
