@@ -28,7 +28,7 @@ Run the workflow by hand: mode `pr` (pick a marker), `release` (retry the versio
 ## Installing
 
 ```
-curl -fsSL https://raw.githubusercontent.com/aiyu-ayaan/findex-rust/master/scripts/install-linux.sh | sh
+curl -fsSL https://raw.githubusercontent.com/aiyu-ayaan/Switchboard-Rust/master/scripts/install-linux.sh | sh
 ```
 
 Options: `--channel beta|alpha`, `--version X`, `--from-file PATH`, `--set-default`, `--uninstall` (which first runs `findex --repair`, so folders go back to the previous file manager before the app is deleted).

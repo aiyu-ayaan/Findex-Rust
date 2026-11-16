@@ -1,7 +1,7 @@
 #!/bin/sh
 # Install, update or remove Findex on Linux (x86_64), for this user, no root.
 #
-#   curl -fsSL https://raw.githubusercontent.com/aiyu-ayaan/findex-rust/master/scripts/install-linux.sh | sh
+#   curl -fsSL https://raw.githubusercontent.com/aiyu-ayaan/Switchboard-Rust/master/scripts/install-linux.sh | sh
 #   ... | sh -s -- --channel beta     beta builds (and stable ones)
 #   ... | sh -s -- --version 0.0.1    a specific release
 #   ... | sh -s -- --uninstall        remove it (settings stay in ~/.config/findex)
@@ -14,7 +14,7 @@
 # POSIX sh: it is piped into whatever `sh` is, which on Debian and Ubuntu is dash.
 set -eu
 
-API="${FINDEX_RELEASES_URL:-https://api.github.com/repos/aiyu-ayaan/findex-rust/releases?per_page=100}"
+API="${FINDEX_RELEASES_URL:-https://api.github.com/repos/aiyu-ayaan/Switchboard-Rust/releases?per_page=100}"
 DATA_HOME="${XDG_DATA_HOME:-$HOME/.local/share}"
 APP="$DATA_HOME/findex/Findex.AppImage"
 BIN="$HOME/.local/bin/findex"

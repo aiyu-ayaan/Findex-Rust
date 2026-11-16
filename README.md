@@ -2,9 +2,9 @@
 
 # Findex for Linux and Windows
 
-[![CI](https://github.com/aiyu-ayaan/findex-rust/actions/workflows/ci.yml/badge.svg)](https://github.com/aiyu-ayaan/findex-rust/actions/workflows/ci.yml)
-[![Release](https://badgen.net/github/release/aiyu-ayaan/findex-rust)](https://github.com/aiyu-ayaan/findex-rust/releases)
-[![Last commit](https://badgen.net/github/last-commit/aiyu-ayaan/findex-rust)](https://github.com/aiyu-ayaan/findex-rust/commits/master)
+[![CI](https://github.com/aiyu-ayaan/Switchboard-Rust/actions/workflows/ci.yml/badge.svg)](https://github.com/aiyu-ayaan/Switchboard-Rust/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/aiyu-ayaan/Switchboard-Rust)](https://github.com/aiyu-ayaan/Switchboard-Rust/releases)
+[![Last commit](https://img.shields.io/github/last-commit/aiyu-ayaan/Switchboard-Rust)](https://github.com/aiyu-ayaan/Switchboard-Rust/commits/master)
 
 ![Rust](https://img.shields.io/badge/language-Rust-DEA584?logo=rust&logoColor=white)
 ![Slint](https://img.shields.io/badge/UI-Slint-2379F4?logo=slint&logoColor=white)
@@ -93,10 +93,10 @@ All screenshots come from the end-to-end UI test runs (`tests/ui`).
 **Linux (x86_64)**, no root needed. This installs the AppImage, the Findex logo at every size and a menu entry in your home folder:
 
 ```
-curl -fsSL https://raw.githubusercontent.com/aiyu-ayaan/findex-rust/master/scripts/install-linux.sh | sh
+curl -fsSL https://raw.githubusercontent.com/aiyu-ayaan/Switchboard-Rust/master/scripts/install-linux.sh | sh
 ```
 
-Add `-s -- --set-default` to also make Findex the default file manager (folders and Super+E on GNOME open Findex). Use `-s -- --channel beta` for beta builds, `-s -- --version 0.0.1` for one release, or `-s -- --uninstall` to remove it. Run it again to update. The `.deb` and the Windows build are on the [Releases](https://github.com/aiyu-ayaan/findex-rust/releases) page.
+Add `-s -- --set-default` to also make Findex the default file manager (folders and Super+E on GNOME open Findex). Use `-s -- --channel beta` for beta builds, `-s -- --version 0.0.1` for one release, or `-s -- --uninstall` to remove it. Run it again to update. The `.deb` and the Windows build are on the [Releases](https://github.com/aiyu-ayaan/Switchboard-Rust/releases) page.
 
 Default file manager from the app: **See more (⋯) > Options > Findex**, or `findex --set-default`. Undo with `findex --repair`, which restores the previous handler.
 
