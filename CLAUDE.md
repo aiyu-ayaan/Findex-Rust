@@ -2,7 +2,7 @@
 
 A fast, cross-platform file explorer in Rust. The UI matches Windows 11 File Explorer. It runs on Linux and Windows and can be set as the default file manager on both.
 
-**Status: analysis and design are complete. Development has not started.** Do not scaffold code until the owner says so. The next step is milestone M0 in `development/TODO.md`.
+**Status: early alpha.** M0–M1 are largely implemented and tested on Linux, with parts of M2–M6 and M8 done. `development/TODO.md` tracks what is done, partial and open. The Windows build compiles in CI but is untested on hardware.
 
 Full detail lives in `development/docs/`. This file is the compiled summary. When this file and a doc disagree, the doc wins; fix this file.
 
@@ -18,6 +18,7 @@ Full detail lives in `development/docs/`. This file is the compiled summary. Whe
 | `development/docs/06-cleanup-and-thumbnails.md` | Disk cleanup, deep clean, analyzer, thumbnail pipeline |
 | `development/docs/07-ui-design-language.md` | Any UI work: tokens, metrics, components, motion, accessibility |
 | `development/docs/08-roadmap.md` | Spikes, milestones, risks, open questions |
+| `development/docs/09-release.md` | Release markers, workflow, installer |
 | `development/TODO.md` | What to do next |
 
 ## Product requirements (from the owner)
@@ -66,12 +67,14 @@ Cold start < 150 ms. 100k-entry folder first rows < 80 ms, complete < 600 ms. 60
 - Do not commit `.codegraph/` or `.claude/settings.local.json` (already ignored).
 - Docs are English. Keep them factual; tag unverified claims.
 - Safety rules are not optional: revert-first uninstall, Explorer fallback stub, allow-list cleanup, no symlink following in recursive deletes, timeouts on every mount probe.
-- Prefer CodeGraph (`codegraph_explore`) over grep when code exists. Right now the only indexed code is the vendored skill scripts under `.agents/` and `.claude/skills/`.
+- Prefer CodeGraph (`codegraph_explore`) over grep for code questions.
+- Tests: `cargo test --workspace`, then `tests/ui/run.sh` (scripted end-to-end UI suites with snapshots; see `crates/findex-app/src/ui_test.rs`). Run both before committing UI or behaviour changes.
+- Releases: a `!alpha` / `!fix` / ... marker at the start of a commit subject on master opens a release PR (see `development/docs/09-release.md`). Never add a marker unless the owner asks for a release.
 - UI work must follow `development/docs/07-ui-design-language.md`; use the `ui-ux-pro-max` skill for design queries (`python3 .claude/skills/ui-ux-pro-max/scripts/search.py ...`, run without `-I`).
 
 ## Open questions
 
 1. Does "copy and paste same panel" mean one unified transfer panel?
-2. Project licence (drives the Slint decision).
+2. Project licence (drives the Slint decision). No licence is declared yet; the Android Findex app is Apache-2.0.
 3. Minimum Windows (10 22H2?) and Linux (glibc 2.31?) versions.
 4. Per-user installer default on Windows.
