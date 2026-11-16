@@ -117,6 +117,15 @@ pub struct App {
     tabs_model: Rc<VecModel<TabData>>,
     jobs_model: Rc<VecModel<JobData>>,
     default_fm: bool,
+    /// Key of the drive being renamed in the dialog.
+    drive_target: Option<String>,
+}
+
+/// Stable identity of a drive: block device, else mount path.
+fn drive_key(d: &Drive) -> String {
+    d.device
+        .clone()
+        .unwrap_or_else(|| d.path.display().to_string())
 }
 
 pub fn start(ui: AppWindow, start: Option<PathBuf>) {
@@ -146,6 +155,7 @@ pub fn start(ui: AppWindow, start: Option<PathBuf>) {
             app.options.set_opts(d);
         })
     });
+    options.on_unhide_drive(|i| with_app(|app| app.unhide_drive(i as usize)));
     options.on_toggle_default_fm(|| with_app(|app| app.toggle_default_fm()));
     options.on_close_requested(|| with_app(|app| drop(app.options.hide())));
     let transfer = TransferWindow::new().expect("create transfer window");
@@ -170,6 +180,7 @@ pub fn start(ui: AppWindow, start: Option<PathBuf>) {
         thumbs,
         drives: Vec::new(),
         all_drives: Vec::new(),
+        drive_target: None,
         options,
         nav_targets: Vec::new(),
         places: findex_platform::places(),
@@ -217,10 +228,30 @@ pub fn start(ui: AppWindow, start: Option<PathBuf>) {
     }
     APP.with(|c| *c.borrow_mut() = Some(app));
     wire(&ui);
+    wire_mouse_buttons(&ui);
     spawn_drive_watcher();
     std::thread::spawn(|| {
         let is_default = findex_platform::is_default_file_manager();
         post(move |app| app.set_default_fm_state(is_default));
+    });
+}
+
+/// Mouse side buttons: back and forward through the tab's history, like Explorer.
+fn wire_mouse_buttons(ui: &AppWindow) {
+    use slint::winit_030::winit::event::{ElementState, MouseButton, WindowEvent};
+    use slint::winit_030::{EventResult, WinitWindowAccessor};
+    ui.window().on_winit_window_event(|_, event| {
+        if let WindowEvent::MouseInput {
+            state: ElementState::Pressed,
+            button: button @ (MouseButton::Back | MouseButton::Forward),
+            ..
+        } = event
+        {
+            let back = *button == MouseButton::Back;
+            post(move |app| if back { app.back() } else { app.forward() });
+            return EventResult::PreventDefault;
+        }
+        EventResult::Propagate
     });
 }
 
@@ -314,6 +345,11 @@ fn wire(ui: &AppWindow) {
     on!(on_nav_activate, |app, i| app.nav_activate(i as usize));
     on!(on_drive_open, |app, net, i| app.drive_open(net, i as usize));
     on!(on_drive_eject, |app, i| app.drive_eject(i as usize));
+    on!(on_drive_rename_start, |app, net, i| app
+        .drive_rename_start(net, i as usize));
+    on!(on_drive_rename_commit, |app, name| app
+        .drive_rename_commit(name.to_string()));
+    on!(on_drive_hide, |app, net, i| app.drive_hide(net, i as usize));
     on!(on_job_pause, |app, id| app.job_pause(id as u64));
     on!(on_job_cancel, |app, id| app.job_cancel(id as u64));
     on!(on_clear_finished, |app| {
@@ -412,9 +448,11 @@ impl App {
     fn show_options(&mut self) {
         self.options.set_opts(self.settings.to_options());
         self.options.set_page(0);
+        self.sync_hidden_drives();
         self.set_default_fm_state(self.default_fm);
         if !self.options.window().is_visible() {
             let _ = self.options.show();
+            self.options.invoke_focus_window();
             Timer::single_shot(Duration::ZERO, || {
                 with_app(|app| apply_effects(app.options.window(), &app.options.global::<Theme>()))
             });
@@ -898,18 +936,36 @@ impl App {
                 NavTarget::ThisPc,
             );
         }
-        for (i, d) in self.drives.iter().enumerate() {
-            let network = d.kind == DriveKind::Network;
+        // Mounted and unmounted devices first, then a separate "Network" group.
+        for network in [false, true] {
             if (network && !s.nav_network) || (!network && !s.nav_this_pc) {
                 continue;
             }
-            let icon = match d.kind {
-                DriveKind::Removable => "usb",
-                DriveKind::Network => "network",
-                _ => "drive",
-            };
-            let cur = !d.path.as_os_str().is_empty() && current.as_ref() == Some(&d.path);
-            push(&mut items, &d.label, icon, 1, cur, NavTarget::Drive(i));
+            if network && self.drives.iter().any(|d| d.kind == DriveKind::Network) {
+                push(&mut items, "", "", 2, false, NavTarget::None);
+                push(
+                    &mut items,
+                    "Network",
+                    "network",
+                    0,
+                    false,
+                    NavTarget::ThisPc,
+                );
+            }
+            for (i, d) in self
+                .drives
+                .iter()
+                .enumerate()
+                .filter(|(_, d)| (d.kind == DriveKind::Network) == network)
+            {
+                let icon = match d.kind {
+                    DriveKind::Removable => "usb",
+                    DriveKind::Network => "network",
+                    _ => "drive",
+                };
+                let cur = !d.path.as_os_str().is_empty() && current.as_ref() == Some(&d.path);
+                push(&mut items, &d.label, icon, 1, cur, NavTarget::Drive(i));
+            }
         }
         if let Some(trash) = findex_platform::trash_dir().filter(|t| s.nav_trash && t.is_dir()) {
             push(&mut items, "", "", 2, false, NavTarget::None);
@@ -927,11 +983,9 @@ impl App {
     }
 
     fn set_drives(&mut self, drives: Vec<Drive>) {
-        let (hide_empty, show_paths) = (
-            self.settings.hide_empty_drives,
-            self.settings.show_mount_paths,
-        );
+        let hide_empty = self.settings.hide_empty_drives;
         self.all_drives = drives.clone();
+        let settings = &self.settings;
         self.drives = drives
             .into_iter()
             // "Hide empty drives": card readers and optical drives without media report no size.
@@ -939,19 +993,27 @@ impl App {
                 !(hide_empty
                     && d.total == 0
                     && matches!(d.kind, DriveKind::Removable | DriveKind::Optical))
+                    && !settings
+                        .hidden_drives
+                        .iter()
+                        .any(|(k, _)| *k == drive_key(d))
             })
             .map(|mut d| {
-                // "Show drive letters": the "(C:)" / "(/media/x)" suffix.
-                if !show_paths
-                    && d.kind != DriveKind::Unmounted
+                // The title is the volume name only; the mount point goes to the detail line.
+                if d.kind != DriveKind::Unmounted
                     && let Some((name, _)) =
                         d.label.rsplit_once(" (").filter(|_| d.label.ends_with(')'))
                 {
                     d.label = name.to_string();
                 }
+                let key = drive_key(&d);
+                if let Some((_, name)) = settings.drive_names.iter().find(|(k, _)| *k == key) {
+                    d.label = name.clone();
+                }
                 d
             })
             .collect();
+        let show_paths = self.settings.show_mount_paths;
         let to_data = |d: &Drive| {
             // Unmounted volumes have a size but no free-space figure: no usage bar, no low-space warning.
             let measured = d.total > 0 && d.kind != DriveKind::Unmounted;
@@ -972,10 +1034,18 @@ impl App {
                 usage,
                 detail: match d.kind {
                     DriveKind::Unmounted => format!("{} · Click to mount", format::size(d.total)),
-                    _ if d.total > 0 => {
-                        format!("{} free of {}", format::size(d.free), format::size(d.total))
+                    _ => {
+                        let space = (d.total > 0).then(|| {
+                            format!("{} free of {}", format::size(d.free), format::size(d.total))
+                        });
+                        let path = (show_paths && d.kind != DriveKind::Network)
+                            .then(|| d.path.display().to_string());
+                        [space, path]
+                            .into_iter()
+                            .flatten()
+                            .collect::<Vec<_>>()
+                            .join(" · ")
                     }
-                    _ => String::new(),
                 }
                 .into(),
                 low_space: measured && (d.free as f64) < d.total as f64 * 0.1,
@@ -1063,6 +1133,73 @@ impl App {
                 Err(e) => app.toast(format!("Couldn't eject {label}: {e}"), false),
             });
         });
+    }
+
+    /// The drive shown at `i` in the local or network list.
+    fn drive_at(&self, network: bool, i: usize) -> Option<Drive> {
+        self.drives
+            .iter()
+            .filter(|d| (d.kind == DriveKind::Network) == network)
+            .nth(i)
+            .cloned()
+    }
+
+    fn drive_rename_start(&mut self, network: bool, i: usize) {
+        let Some(d) = self.drive_at(network, i) else {
+            return;
+        };
+        self.drive_target = Some(drive_key(&d));
+        self.ui.invoke_show_drive_rename(d.label.into());
+    }
+
+    /// An empty name restores the original one. Names persist in settings.
+    fn drive_rename_commit(&mut self, name: String) {
+        let Some(key) = self.drive_target.take() else {
+            return;
+        };
+        let name = name.trim().to_string();
+        self.settings.drive_names.retain(|(k, _)| *k != key);
+        if !name.is_empty() {
+            self.settings.drive_names.push((key, name));
+        }
+        self.settings.save();
+        let all = self.all_drives.clone();
+        self.set_drives(all);
+    }
+
+    fn drive_hide(&mut self, network: bool, i: usize) {
+        let Some(d) = self.drive_at(network, i) else {
+            return;
+        };
+        self.settings.hidden_drives.push((drive_key(&d), d.label));
+        self.settings.save();
+        let all = self.all_drives.clone();
+        self.set_drives(all);
+        self.toast(
+            "Drive hidden. Show it again in Options > View.".into(),
+            false,
+        );
+    }
+
+    fn unhide_drive(&mut self, i: usize) {
+        if i < self.settings.hidden_drives.len() {
+            self.settings.hidden_drives.remove(i);
+            self.settings.save();
+            let all = self.all_drives.clone();
+            self.set_drives(all);
+            self.sync_hidden_drives();
+        }
+    }
+
+    fn sync_hidden_drives(&self) {
+        let names: Vec<SharedString> = self
+            .settings
+            .hidden_drives
+            .iter()
+            .map(|(_, n)| n.as_str().into())
+            .collect();
+        self.options
+            .set_hidden_drives(ModelRc::new(VecModel::from(names)));
     }
 
     // ---------------- items ----------------

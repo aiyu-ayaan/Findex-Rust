@@ -16,7 +16,7 @@ osnap 71-options-view
 oclick 34 231
 oclick 34 171
 oclick 34 351
-oclick 34 441
+oclick 34 492
 oclick 464 608
 expect rows 18
 expect checkboxes true
@@ -47,7 +47,7 @@ expect options-window true
 oclick 34 358
 oclick 121 65
 wait 200
-oclick 34 503
+oclick 34 554
 oclick 288 608
 expect options-window false
 click 400 187

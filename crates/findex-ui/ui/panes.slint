@@ -192,13 +192,22 @@ component DriveTile inherits Rectangle {
     in property <DriveData> drive;
     callback clicked;
     callback eject;
+    callback menu(length, length);
     height: 76px;
     border-radius: Theme.radius;
     background: touch.has-hover ? Theme.subtle-hover : transparent;
     accessible-role: button;
     accessible-label: drive.label + ", " + drive.detail;
     accessible-action-default => { clicked(); }
-    touch := TouchArea { double-clicked => { root.clicked(); } clicked => { root.clicked(); } }
+    touch := TouchArea {
+        double-clicked => { root.clicked(); }
+        clicked => { root.clicked(); }
+        pointer-event(e) => {
+            if e.kind == PointerEventKind.down && e.button == PointerEventButton.right {
+                root.menu(self.absolute-position.x + self.mouse-x, self.absolute-position.y + self.mouse-y);
+            }
+        }
+    }
     HorizontalLayout {
         padding: 10px;
         spacing: 12px;
@@ -241,6 +250,7 @@ export component ThisPcPage inherits Rectangle {
     in property <[DriveData]> network;
     callback open-drive(bool, int);
     callback eject-drive(int);
+    callback drive-menu(bool, int, length, length);
     property <int> cols: max(1, floor((self.width - 32px) / 320px));
     property <length> tile-w: (self.width - 32px) / cols;
     ScrollView {
@@ -258,6 +268,7 @@ export component ThisPcPage inherits Rectangle {
                     drive: d;
                     clicked => { root.open-drive(false, i); }
                     eject => { root.eject-drive(i); }
+                    menu(x, y) => { root.drive-menu(false, i, x, y); }
                 }
             }
             if network.length > 0: Text { text: "Network locations (" + network.length + ")"; color: Theme.text-primary; font-weight: 600; }
@@ -269,6 +280,7 @@ export component ThisPcPage inherits Rectangle {
                     width: tile-w - 8px;
                     drive: d;
                     clicked => { root.open-drive(true, i); }
+                    menu(x, y) => { root.drive-menu(true, i, x, y); }
                 }
             }
         }

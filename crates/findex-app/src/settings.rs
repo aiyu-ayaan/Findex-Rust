@@ -36,6 +36,9 @@ pub struct Settings {
     pub search_hidden: bool,
     /// Open tabs at exit, for "Restore previous folder tabs at startup".
     pub tabs: Vec<PathBuf>,
+    /// Custom drive names and hidden drives as (key, name); the key is the device or mount path.
+    pub drive_names: Vec<(String, String)>,
+    pub hidden_drives: Vec<(String, String)>,
 }
 
 impl Default for Settings {
@@ -66,6 +69,8 @@ impl Default for Settings {
             search_subfolders: true,
             search_hidden: false,
             tabs: Vec::new(),
+            drive_names: Vec::new(),
+            hidden_drives: Vec::new(),
         }
     }
 }
@@ -120,6 +125,12 @@ impl Settings {
                         "theme" => s.theme = v.parse().unwrap_or(0).clamp(0, 2),
                         "view" => s.view = v.parse().unwrap_or(5).clamp(0, 7),
                         "tab" => s.tabs.push(PathBuf::from(v)),
+                        "drive_name" | "hidden_drive" => {
+                            if let Some((key, name)) = v.split_once('\t') {
+                                let list = if k == "drive_name" { &mut s.drive_names } else { &mut s.hidden_drives };
+                                list.push((key.to_string(), name.to_string()));
+                            }
+                        }
                         _ => {}
                     }
                 };
@@ -137,6 +148,12 @@ impl Settings {
         bool_keys!(put_bool);
         for tab in &self.tabs {
             t.push_str(&format!("tab={}\n", tab.display()));
+        }
+        for (key, name) in &self.drive_names {
+            t.push_str(&format!("drive_name={key}\t{name}\n"));
+        }
+        for (key, name) in &self.hidden_drives {
+            t.push_str(&format!("hidden_drive={key}\t{name}\n"));
         }
         t
     }
@@ -232,6 +249,8 @@ mod tests {
             single_click: true,
             nav_trash: false,
             tabs: vec![PathBuf::from("/tmp/a b"), PathBuf::from("/home")],
+            drive_names: vec![("/dev/sda1".into(), "Games".into())],
+            hidden_drives: vec![("/mnt/x=y".into(), "Backup".into())],
             ..Default::default()
         };
         assert_eq!(Settings::parse(&s.to_text()), s);

@@ -133,6 +133,9 @@ export component OptionsWindow inherits Window {
 
     in-out property <Options> opts;
     in property <bool> default-fm;
+    in property <[string]> hidden-drives;
+    callback unhide-drive(int);
+    public function focus-window() { esc.focus(); }
     in property <string> default-fm-text;
     in-out property <int> page;
     callback apply(Options);
@@ -140,6 +143,12 @@ export component OptionsWindow inherits Window {
     callback toggle-default-fm();
     callback close-requested();
 
+    esc := FocusScope {
+        init => { self.focus(); }
+        key-pressed(e) => {
+            if e.text == Key.Escape { root.close-requested(); return accept; }
+            reject
+        }
     Rectangle {
         background: Theme.mica;
         border-radius: Theme.radius-overlay;
@@ -216,6 +225,14 @@ export component OptionsWindow inherits Window {
                             Check { text: "Show status bar"; checked: opts.show-status-bar; toggled => { opts.show-status-bar = self.checked; } }
                             Check { text: "Use check boxes to select items"; checked: opts.check-boxes; toggled => { opts.check-boxes = self.checked; } }
                             Rectangle { height: 10px; }
+                            SectionTitle { text: "Hidden drives"; }
+                            if hidden-drives.length == 0: Text { text: "None. Right-click a drive in This PC and choose Hide this drive."; color: Theme.text-secondary; wrap: word-wrap; }
+                            for n[i] in hidden-drives: HorizontalLayout {
+                                spacing: 12px;
+                                Text { text: n; color: Theme.text-primary; vertical-alignment: center; overflow: elide; horizontal-stretch: 1; }
+                                DialogButton { text: "Show"; min-width: 72px; clicked => { root.unhide-drive(i); } }
+                            }
+                            Rectangle { height: 10px; }
                             SectionTitle { text: "Hidden files and folders"; }
                             Radio { text: "Don't show hidden files, folders, or drives"; checked: !opts.show-hidden; clicked => { opts.show-hidden = false; } }
                             Radio { text: "Show hidden files, folders, and drives"; checked: opts.show-hidden; clicked => { opts.show-hidden = true; } }
@@ -280,5 +297,6 @@ export component OptionsWindow inherits Window {
                 DialogButton { text: "Apply"; min-width: 80px; clicked => { root.apply(opts); } }
             }
         }
+    }
     }
 }

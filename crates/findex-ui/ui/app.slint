@@ -109,6 +109,9 @@ export component AppWindow inherits Window {
     callback nav-activate(int);
     callback drive-open(bool, int);
     callback drive-eject(int);
+    callback drive-rename-start(bool, int);
+    callback drive-rename-commit(string);
+    callback drive-hide(bool, int);
     callback job-pause(int);
     callback job-cancel(int);
     callback clear-finished();
@@ -125,6 +128,11 @@ export component AppWindow inherits Window {
     // ---- functions Rust calls ----
     public function show-rename(name: string) {
         dialog-kind = 1;
+        dialog-input = name;
+        dialog.open-focus();
+    }
+    public function show-drive-rename(name: string) {
+        dialog-kind = 3;
         dialog-input = name;
         dialog.open-focus();
     }
@@ -150,7 +158,9 @@ export component AppWindow inherits Window {
         context-menu.show();
     }
 
-    property <int> dialog-kind; // 0 none, 1 rename, 2 delete permanently
+    property <int> dialog-kind; // 0 none, 1 rename, 2 delete permanently, 3 rename drive
+    property <bool> drive-net;
+    property <int> drive-idx;
     property <string> dialog-input;
     property <int> delete-count;
     property <length> menu-x;
@@ -265,6 +275,13 @@ export component AppWindow inherits Window {
                             network: root.network-drives;
                             open-drive(net, i) => { root.drive-open(net, i); }
                             eject-drive(i) => { root.drive-eject(i); }
+                            drive-menu(net, i, x, y) => {
+                                root.drive-net = net;
+                                root.drive-idx = i;
+                                root.menu-x = min(x, root.width - 228px);
+                                root.menu-y = min(y, root.height - 100px);
+                                drive-popup.show();
+                            }
                         }
                         if !root.this-pc && root.view-mode == 5: DetailsView {
                             rows: root.rows;
@@ -429,6 +446,19 @@ export component AppWindow inherits Window {
             }
         }
     }
+    drive-popup := PopupWindow {
+        x: root.menu-x;
+        y: root.menu-y;
+        Flyout {
+            width: 220px;
+            height: dl.preferred-height;
+            dl := VerticalLayout {
+                padding: 4px;
+                MenuRow { icon: Icons.rename; text: "Rename"; clicked => { root.drive-rename-start(root.drive-net, root.drive-idx); } }
+                MenuRow { icon: Icons.dismiss; text: "Hide this drive"; clicked => { root.drive-hide(root.drive-net, root.drive-idx); } }
+            }
+        }
+    }
     context-menu := PopupWindow {
         x: root.menu-x;
         y: root.menu-y;
@@ -464,15 +494,16 @@ export component AppWindow inherits Window {
     // ---- modal dialogs ----
     dialog := Dialog {
         visible: root.dialog-kind != 0;
-        title: root.dialog-kind == 1 ? "Rename" : "Delete permanently?";
-        message: root.dialog-kind == 2 ? (root.delete-count == 1 ? "This item will be deleted and cannot be restored from the Trash." : root.delete-count + " items will be deleted and cannot be restored from the Trash.") : "";
-        primary-text: root.dialog-kind == 1 ? "Rename" : "Delete";
+        title: root.dialog-kind == 1 ? "Rename" : root.dialog-kind == 3 ? "Rename drive" : "Delete permanently?";
+        message: root.dialog-kind == 3 ? "Leave the name empty to restore the original one." : root.dialog-kind == 2 ? (root.delete-count == 1 ? "This item will be deleted and cannot be restored from the Trash." : root.delete-count + " items will be deleted and cannot be restored from the Trash.") : "";
+        primary-text: root.dialog-kind == 1 || root.dialog-kind == 3 ? "Rename" : "Delete";
         danger: root.dialog-kind == 2;
-        has-input: root.dialog-kind == 1;
-        input-label: "New name";
+        has-input: root.dialog-kind == 1 || root.dialog-kind == 3;
+        input-label: root.dialog-kind == 3 ? "Drive name" : "New name";
         input-text <=> root.dialog-input;
         primary => {
             if root.dialog-kind == 1 { root.rename-commit(root.dialog-input); }
+            if root.dialog-kind == 3 { root.drive-rename-commit(root.dialog-input); }
             if root.dialog-kind == 2 { root.delete-confirmed(); }
             root.dialog-kind = 0;
             list-scope.focus();

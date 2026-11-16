@@ -50,6 +50,7 @@ Legend: `[ ]` open, `[x]` done. P0 = v1.0 blocker, P1 = v1.0 target, P2 = later.
 - [ ] Linux: udisks2 via D-Bus (mount, unmount, eject, hotplug) (mount/eject via `udisksctl` done; D-Bus open)
 - [x] Linux: GVfs locations (smb, sftp, mtp) as optional (listed from the gvfs FUSE dir)
 - [ ] Linux: filter pseudo filesystems, "show all" toggle (filter done)
+- [x] Drives: readable names (label, else "Local Disk (size)"), rename (persisted), hide and restore from Options > View, separate Network group in the nav pane
 - [x] Timeout-guarded free-space probes
 - [ ] Windows: logical drives, network drives, known folders, Recycle Bin (drives + known folders done, untested on hardware)
 - [x] This PC page with usage bars and groups
@@ -59,6 +60,7 @@ Legend: `[ ]` open, `[x]` done. P0 = v1.0 blocker, P1 = v1.0 target, P2 = later.
 
 - [ ] Clipboard interop (Windows `CF_HDROP`, Linux uri-list plus gnome/kde cut formats)
 - [ ] Drag and drop inside app and with other apps
+- [x] Mouse side buttons (back / forward) and Esc closes the Options window
 - [x] Unified transfer panel with graph, pause, resume, cancel (separate window)
 - [ ] Copy, move, delete engine with per-device queue (engine done; one global queue for now)
 - [ ] Reflink / `copy_file_range` / `CopyFile2` paths (Linux done; Windows buffered)
