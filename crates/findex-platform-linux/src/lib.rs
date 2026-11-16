@@ -50,10 +50,28 @@ pub fn apply_window_effects(_handle: raw_window_handle::RawWindowHandle, _dark: 
 
 /// Shared freedesktop thumbnail cache, so Findex reuses thumbnails made by Nautilus, Dolphin and others.
 pub fn thumbnail_cache_dir() -> PathBuf {
-    dirs::cache_dir().unwrap_or_else(|| PathBuf::from("/tmp")).join("thumbnails")
+    dirs::cache_dir()
+        .unwrap_or_else(|| PathBuf::from("/tmp"))
+        .join("thumbnails")
 }
 
 /// Location of the user trash folder for the "Recycle Bin" place.
 pub fn trash_dir() -> Option<PathBuf> {
     dirs::data_dir().map(|d| d.join("Trash/files"))
+}
+
+/// Desktop dark-mode preference (GNOME `color-scheme`, then the GTK theme name).
+pub fn system_prefers_dark() -> bool {
+    let get = |key: &str| {
+        Command::new("gsettings")
+            .args(["get", "org.gnome.desktop.interface", key])
+            .output()
+            .map(|o| String::from_utf8_lossy(&o.stdout).to_ascii_lowercase())
+            .unwrap_or_default()
+    };
+    let scheme = get("color-scheme");
+    if scheme.contains("dark") {
+        return true;
+    }
+    !scheme.contains("light") && get("gtk-theme").contains("dark")
 }

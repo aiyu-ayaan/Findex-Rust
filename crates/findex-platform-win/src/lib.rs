@@ -26,11 +26,18 @@ fn wide(s: &OsStr) -> Vec<u16> {
 
 fn filetime_to_unix(lo: u32, hi: u32) -> i64 {
     let t = ((hi as u64) << 32) | lo as u64;
-    if t == 0 { 0 } else { (t as i64 - 116_444_736_000_000_000) / 10_000_000 }
+    if t == 0 {
+        0
+    } else {
+        (t as i64 - 116_444_736_000_000_000) / 10_000_000
+    }
 }
 
 /// Runs `f` on its own thread and gives up after `timeout`. A hung share only leaks that thread.
-pub fn with_timeout<T: Send + 'static>(timeout: Duration, f: impl FnOnce() -> T + Send + 'static) -> Option<T> {
+pub fn with_timeout<T: Send + 'static>(
+    timeout: Duration,
+    f: impl FnOnce() -> T + Send + 'static,
+) -> Option<T> {
     let (tx, rx) = mpsc::channel();
     std::thread::Builder::new()
         .name("findex-probe".into())
@@ -65,7 +72,11 @@ pub fn list_dir(path: &Path, cancel: &Cancel, sink: &mut dyn FnMut(Vec<Entry>)) 
         if cancel.is_cancelled() {
             break;
         }
-        let len = data.cFileName.iter().position(|&c| c == 0).unwrap_or(data.cFileName.len());
+        let len = data
+            .cFileName
+            .iter()
+            .position(|&c| c == 0)
+            .unwrap_or(data.cFileName.len());
         let name = OsString::from_wide(&data.cFileName[..len]);
         if name != "." && name != ".." {
             let a = data.dwFileAttributes;
@@ -78,8 +89,17 @@ pub fn list_dir(path: &Path, cancel: &Cancel, sink: &mut dyn FnMut(Vec<Entry>)) 
                 flags |= FLAG_SYMLINK;
             }
             let size = ((data.nFileSizeHigh as u64) << 32) | data.nFileSizeLow as u64;
-            let mtime = filetime_to_unix(data.ftLastWriteTime.dwLowDateTime, data.ftLastWriteTime.dwHighDateTime);
-            chunk.push(Entry::new(name, is_dir, if is_dir { 0 } else { size }, mtime, flags));
+            let mtime = filetime_to_unix(
+                data.ftLastWriteTime.dwLowDateTime,
+                data.ftLastWriteTime.dwHighDateTime,
+            );
+            chunk.push(Entry::new(
+                name,
+                is_dir,
+                if is_dir { 0 } else { size },
+                mtime,
+                flags,
+            ));
             if chunk.len() >= limit {
                 sink(std::mem::replace(&mut chunk, Vec::with_capacity(CHUNK)));
                 limit = CHUNK;
@@ -102,7 +122,10 @@ pub fn list_dir(path: &Path, cancel: &Cancel, sink: &mut dyn FnMut(Vec<Entry>)) 
 pub fn copy_file(src: &Path, dst: &Path, progress: &mut dyn FnMut(u64) -> bool) -> io::Result<()> {
     let mut input = std::fs::File::open(src)?;
     let meta = input.metadata()?;
-    let mut output = std::fs::OpenOptions::new().write(true).create_new(true).open(dst)?;
+    let mut output = std::fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(dst)?;
     let result = (|| {
         let mut buf = vec![0u8; 1 << 20];
         let mut done = 0u64;
@@ -168,7 +191,11 @@ pub fn drives() -> Vec<Drive> {
                 )
             };
             let len = label.iter().position(|&c| c == 0).unwrap_or(0);
-            let mut name = if ok != 0 && len > 0 { String::from_utf16_lossy(&label[..len]) } else { String::new() };
+            let mut name = if ok != 0 && len > 0 {
+                String::from_utf16_lossy(&label[..len])
+            } else {
+                String::new()
+            };
             if name.is_empty() {
                 name = match kind {
                     DriveKind::Removable => "USB Drive",
@@ -181,55 +208,130 @@ pub fn drives() -> Vec<Drive> {
             let letter = path.to_string_lossy().trim_end_matches('\\').to_string();
             let (total, free) = with_timeout(PROBE_TIMEOUT, move || {
                 let (mut free, mut total) = (0u64, 0u64);
-                let ok = unsafe { GetDiskFreeSpaceExW(root_w.as_ptr(), &mut free, &mut total, std::ptr::null_mut()) };
+                let ok = unsafe {
+                    GetDiskFreeSpaceExW(
+                        root_w.as_ptr(),
+                        &mut free,
+                        &mut total,
+                        std::ptr::null_mut(),
+                    )
+                };
                 if ok != 0 { (total, free) } else { (0, 0) }
             })
             .unwrap_or((0, 0));
-            Drive { label: format!("{name} ({letter})"), path, device: None, kind, total, free }
+            Drive {
+                label: format!("{name} ({letter})"),
+                path,
+                device: None,
+                kind,
+                total,
+                free,
+            }
         })
         .collect()
 }
 
 pub fn mount(_device: &str) -> io::Result<PathBuf> {
-    Err(io::Error::new(io::ErrorKind::Unsupported, "Windows mounts volumes automatically"))
+    Err(io::Error::new(
+        io::ErrorKind::Unsupported,
+        "Windows mounts volumes automatically",
+    ))
 }
 
 // shortcut: eject needs CM_Request_Device_EjectW; not wired yet.
 pub fn eject(_device: &str) -> io::Result<()> {
-    Err(io::Error::new(io::ErrorKind::Unsupported, "Use Safely Remove Hardware for now"))
+    Err(io::Error::new(
+        io::ErrorKind::Unsupported,
+        "Use Safely Remove Hardware for now",
+    ))
 }
 
 pub fn open_default(path: &Path) -> io::Result<()> {
     let op = wide(OsStr::new("open"));
     let file = wide(path.as_os_str());
-    let r = unsafe { ShellExecuteW(std::ptr::null_mut(), op.as_ptr(), file.as_ptr(), std::ptr::null(), std::ptr::null(), SW_SHOWNORMAL) };
-    if r as usize > 32 { Ok(()) } else { Err(io::Error::last_os_error()) }
+    let r = unsafe {
+        ShellExecuteW(
+            std::ptr::null_mut(),
+            op.as_ptr(),
+            file.as_ptr(),
+            std::ptr::null(),
+            std::ptr::null(),
+            SW_SHOWNORMAL,
+        )
+    };
+    if r as usize > 32 {
+        Ok(())
+    } else {
+        Err(io::Error::last_os_error())
+    }
 }
 
 /// Windows 11 Mica backdrop plus dark title chrome. Returns false where unsupported (Windows 10).
 /// [?] verify on Windows 11 22H2+ that Slint's transparent surface shows the backdrop (spike S1).
 pub fn apply_window_effects(handle: raw_window_handle::RawWindowHandle, dark: bool) -> bool {
-    let raw_window_handle::RawWindowHandle::Win32(h) = handle else { return false };
+    let raw_window_handle::RawWindowHandle::Win32(h) = handle else {
+        return false;
+    };
     let hwnd = h.hwnd.get() as HWND;
     const DWMWA_USE_IMMERSIVE_DARK_MODE: u32 = 20;
     const DWMWA_SYSTEMBACKDROP_TYPE: u32 = 38;
     const DWMSBT_MAINWINDOW: i32 = 2; // Mica
     unsafe {
         let dark = dark as i32;
-        DwmSetWindowAttribute(hwnd, DWMWA_USE_IMMERSIVE_DARK_MODE, &dark as *const _ as _, 4);
-        let margins = MARGINS { cxLeftWidth: -1, cxRightWidth: -1, cyTopHeight: -1, cyBottomHeight: -1 };
+        DwmSetWindowAttribute(
+            hwnd,
+            DWMWA_USE_IMMERSIVE_DARK_MODE,
+            &dark as *const _ as _,
+            4,
+        );
+        let margins = MARGINS {
+            cxLeftWidth: -1,
+            cxRightWidth: -1,
+            cyTopHeight: -1,
+            cyBottomHeight: -1,
+        };
         DwmExtendFrameIntoClientArea(hwnd, &margins);
-        DwmSetWindowAttribute(hwnd, DWMWA_SYSTEMBACKDROP_TYPE, &DWMSBT_MAINWINDOW as *const _ as _, 4) == 0
+        DwmSetWindowAttribute(
+            hwnd,
+            DWMWA_SYSTEMBACKDROP_TYPE,
+            &DWMSBT_MAINWINDOW as *const _ as _,
+            4,
+        ) == 0
     }
 }
 
 pub fn thumbnail_cache_dir() -> PathBuf {
-    dirs::cache_dir().unwrap_or_else(std::env::temp_dir).join("Findex\\thumbnails")
+    dirs::cache_dir()
+        .unwrap_or_else(std::env::temp_dir)
+        .join("Findex\\thumbnails")
 }
 
 /// The Recycle Bin is a shell folder, not a path; browsing it needs the shell provider (M2).
 pub fn trash_dir() -> Option<PathBuf> {
     None
+}
+
+/// "Choose your app mode" (HKCU ... Personalize\AppsUseLightTheme == 0 means dark).
+pub fn system_prefers_dark() -> bool {
+    use windows_sys::Win32::System::Registry::{HKEY_CURRENT_USER, RRF_RT_REG_DWORD, RegGetValueW};
+    let key = wide(OsStr::new(
+        "Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize",
+    ));
+    let name = wide(OsStr::new("AppsUseLightTheme"));
+    let mut value = 1u32;
+    let mut size = 4u32;
+    let r = unsafe {
+        RegGetValueW(
+            HKEY_CURRENT_USER,
+            key.as_ptr(),
+            name.as_ptr(),
+            RRF_RT_REG_DWORD,
+            std::ptr::null_mut(),
+            &mut value as *mut _ as _,
+            &mut size,
+        )
+    };
+    r == 0 && value == 0
 }
 
 pub fn is_default_file_manager() -> bool {

@@ -11,18 +11,29 @@ use std::process::Command;
 const DESKTOP_ID: &str = "findex.desktop";
 
 fn backup_file() -> PathBuf {
-    dirs::config_dir().unwrap_or_default().join("findex/previous-file-manager")
+    dirs::config_dir()
+        .unwrap_or_default()
+        .join("findex/previous-file-manager")
 }
 
 fn query_default() -> Option<String> {
-    let out = Command::new("xdg-mime").args(["query", "default", "inode/directory"]).output().ok()?;
+    let out = Command::new("xdg-mime")
+        .args(["query", "default", "inode/directory"])
+        .output()
+        .ok()?;
     let s = String::from_utf8_lossy(&out.stdout).trim().to_string();
     (!s.is_empty()).then_some(s)
 }
 
 fn set_mime_default(desktop_id: &str) -> io::Result<()> {
-    let st = Command::new("xdg-mime").args(["default", desktop_id, "inode/directory"]).status()?;
-    if st.success() { Ok(()) } else { Err(io::Error::other("xdg-mime default failed")) }
+    let st = Command::new("xdg-mime")
+        .args(["default", desktop_id, "inode/directory"])
+        .status()?;
+    if st.success() {
+        Ok(())
+    } else {
+        Err(io::Error::other("xdg-mime default failed"))
+    }
 }
 
 pub fn is_default_file_manager() -> bool {
@@ -35,7 +46,9 @@ pub fn set_default_file_manager(enable: bool) -> io::Result<String> {
     let backup = backup_file();
     if enable {
         let exe = std::env::current_exe()?;
-        let apps = dirs::data_dir().ok_or_else(|| io::Error::other("no XDG data dir"))?.join("applications");
+        let apps = dirs::data_dir()
+            .ok_or_else(|| io::Error::other("no XDG data dir"))?
+            .join("applications");
         std::fs::create_dir_all(&apps)?;
         std::fs::write(
             apps.join(DESKTOP_ID),
@@ -53,9 +66,13 @@ pub fn set_default_file_manager(enable: bool) -> io::Result<String> {
         set_mime_default(DESKTOP_ID)?;
         Ok("Findex is now the default file manager. Super+E opens it on GNOME.".into())
     } else {
-        let prev = std::fs::read_to_string(&backup).unwrap_or_else(|_| "org.gnome.Nautilus.desktop".into());
+        let prev = std::fs::read_to_string(&backup)
+            .unwrap_or_else(|_| "org.gnome.Nautilus.desktop".into());
         set_mime_default(prev.trim())?;
         let _ = std::fs::remove_file(&backup);
-        Ok(format!("Restored {} as the default file manager.", prev.trim()))
+        Ok(format!(
+            "Restored {} as the default file manager.",
+            prev.trim()
+        ))
     }
 }

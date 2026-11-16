@@ -19,4 +19,5 @@ windows-sys = { workspace = true, features = [
     "Win32_UI_Controls",
     "Win32_UI_WindowsAndMessaging",
     "Win32_System_WindowsProgramming",
+    "Win32_System_Registry",
 ] }

@@ -13,7 +13,11 @@ const CHUNK: usize = 2000;
 /// Streams a directory in chunks using `getdents64` (via rustix) plus one `statx`-family call per entry.
 /// The first chunk is small so the first rows paint quickly.
 pub fn list_dir(path: &Path, cancel: &Cancel, sink: &mut dyn FnMut(Vec<Entry>)) -> io::Result<()> {
-    let fd = rustix::fs::open(path, OFlags::RDONLY | OFlags::DIRECTORY | OFlags::CLOEXEC, Mode::empty())?;
+    let fd = rustix::fs::open(
+        path,
+        OFlags::RDONLY | OFlags::DIRECTORY | OFlags::CLOEXEC,
+        Mode::empty(),
+    )?;
     let mut dir = Dir::read_from(&fd)?;
     let mut chunk = Vec::with_capacity(FIRST_CHUNK);
     let mut limit = FIRST_CHUNK;
@@ -28,22 +32,31 @@ pub fn list_dir(path: &Path, cancel: &Cancel, sink: &mut dyn FnMut(Vec<Entry>)) 
             continue;
         }
         let os_name = OsStr::from_bytes(bytes).to_os_string();
-        let (is_dir, size, mtime, flags) = match rustix::fs::statat(&fd, name, AtFlags::SYMLINK_NOFOLLOW) {
-            Ok(st) => {
-                let ft = FileType::from_raw_mode(st.st_mode);
-                if ft == FileType::Symlink {
-                    // Show the target's kind, but never descend through it elsewhere.
-                    let target = rustix::fs::statat(&fd, name, AtFlags::empty()).ok();
-                    let is_dir = target.as_ref().is_some_and(|t| FileType::from_raw_mode(t.st_mode) == FileType::Directory);
-                    let size = target.map_or(0, |t| t.st_size as u64);
-                    (is_dir, size, st.st_mtime, FLAG_SYMLINK)
-                } else {
-                    (ft == FileType::Directory, st.st_size as u64, st.st_mtime, 0)
+        let (is_dir, size, mtime, flags) =
+            match rustix::fs::statat(&fd, name, AtFlags::SYMLINK_NOFOLLOW) {
+                Ok(st) => {
+                    let ft = FileType::from_raw_mode(st.st_mode);
+                    if ft == FileType::Symlink {
+                        // Show the target's kind, but never descend through it elsewhere.
+                        let target = rustix::fs::statat(&fd, name, AtFlags::empty()).ok();
+                        let is_dir = target.as_ref().is_some_and(|t| {
+                            FileType::from_raw_mode(t.st_mode) == FileType::Directory
+                        });
+                        let size = target.map_or(0, |t| t.st_size as u64);
+                        (is_dir, size, st.st_mtime, FLAG_SYMLINK)
+                    } else {
+                        (ft == FileType::Directory, st.st_size as u64, st.st_mtime, 0)
+                    }
                 }
-            }
-            Err(_) => (item.file_type() == FileType::Directory, 0, 0, 0),
-        };
-        chunk.push(Entry::new(os_name, is_dir, if is_dir { 0 } else { size }, mtime, flags));
+                Err(_) => (item.file_type() == FileType::Directory, 0, 0, 0),
+            };
+        chunk.push(Entry::new(
+            os_name,
+            is_dir,
+            if is_dir { 0 } else { size },
+            mtime,
+            flags,
+        ));
         if chunk.len() >= limit {
             sink(std::mem::replace(&mut chunk, Vec::with_capacity(CHUNK)));
             limit = CHUNK;
@@ -61,7 +74,10 @@ pub fn list_dir(path: &Path, cancel: &Cancel, sink: &mut dyn FnMut(Vec<Entry>)) 
 pub fn copy_file(src: &Path, dst: &Path, progress: &mut dyn FnMut(u64) -> bool) -> io::Result<()> {
     let input = File::open(src)?;
     let meta = input.metadata()?;
-    let output = std::fs::OpenOptions::new().write(true).create_new(true).open(dst)?;
+    let output = std::fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(dst)?;
     let result = copy_data(&input, &output, meta.len(), progress).and_then(|_| {
         output.set_permissions(meta.permissions())?;
         if let Ok(m) = meta.modified() {
@@ -76,10 +92,19 @@ pub fn copy_file(src: &Path, dst: &Path, progress: &mut dyn FnMut(u64) -> bool) 
     result
 }
 
-fn copy_data(mut input: &File, mut output: &File, len: u64, progress: &mut dyn FnMut(u64) -> bool) -> io::Result<()> {
+fn copy_data(
+    mut input: &File,
+    mut output: &File,
+    len: u64,
+    progress: &mut dyn FnMut(u64) -> bool,
+) -> io::Result<()> {
     let cancelled = || io::Error::new(io::ErrorKind::Interrupted, "cancelled");
     if len > 0 && rustix::fs::ioctl_ficlone(output, input).is_ok() {
-        return if progress(len) { Ok(()) } else { Err(cancelled()) };
+        return if progress(len) {
+            Ok(())
+        } else {
+            Err(cancelled())
+        };
     }
     let mut done = 0u64;
     // copy_file_range keeps data in the kernel (and lets NFS/SMB do server-side copies).
