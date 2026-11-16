@@ -1,0 +1,22 @@
+[package]
+name = "findex-platform-win"
+description = "Windows implementation: FindFirstFileExW listing, logical drives, Mica backdrop, shell open."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+findex-core.workspace = true
+dirs.workspace = true
+raw-window-handle.workspace = true
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { workspace = true, features = [
+    "Win32_Foundation",
+    "Win32_Storage_FileSystem",
+    "Win32_Graphics_Dwm",
+    "Win32_UI_Shell",
+    "Win32_UI_Controls",
+    "Win32_UI_WindowsAndMessaging",
+    "Win32_System_WindowsProgramming",
+] }

@@ -1,0 +1,15 @@
+[package]
+name = "findex-platform-linux"
+description = "Linux implementation: getdents64 listing, mountinfo/udisks drives, reflink copy, xdg default handler."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+findex-core.workspace = true
+rustix.workspace = true
+dirs.workspace = true
+raw-window-handle.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true

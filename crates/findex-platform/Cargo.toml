@@ -1,0 +1,16 @@
+[package]
+name = "findex-platform"
+description = "Platform facade: re-exports the Linux or Windows implementation. The only place that selects by target OS."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+findex-core.workspace = true
+dirs.workspace = true
+
+[target.'cfg(target_os = "linux")'.dependencies]
+findex-platform-linux.workspace = true
+
+[target.'cfg(windows)'.dependencies]
+findex-platform-win.workspace = true
