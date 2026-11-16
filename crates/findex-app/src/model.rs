@@ -24,6 +24,8 @@ pub struct Inner {
     pub thumbs: HashMap<u32, Image>,
     pub generation: u64,
     pub want_thumbs: bool,
+    /// "Hide extensions for known file types".
+    pub hide_extensions: bool,
     pub show_hidden: bool,
     /// Focused display row and selection anchor.
     pub focus: Option<usize>,
@@ -49,12 +51,13 @@ impl ListingModel {
         {
             let mut guard = self.inner.borrow_mut();
             let i = &mut *guard;
-            let want_thumbs = i.want_thumbs;
+            let (want_thumbs, hide_extensions) = (i.want_thumbs, i.hide_extensions);
             *i = Inner {
                 folder,
                 generation,
                 show_hidden,
                 want_thumbs,
+                hide_extensions,
                 ..Default::default()
             };
         }
@@ -76,7 +79,7 @@ impl ListingModel {
             i.selected.resize(base as usize + n, false);
             let start = i.order.len();
             for idx in base..base + n as u32 {
-                if Self::visible(&i, idx) {
+                if Self::visible(i, idx) {
                     i.order.push(idx);
                 }
             }
@@ -93,10 +96,7 @@ impl ListingModel {
             let mut guard = self.inner.borrow_mut();
             let i = &mut *guard;
             let focus_entry = i.focus.and_then(|f| i.order.get(f).copied());
-            let order: Vec<u32> = order
-                .into_iter()
-                .filter(|&x| Self::visible(&i, x))
-                .collect();
+            let order: Vec<u32> = order.into_iter().filter(|&x| Self::visible(i, x)).collect();
             i.focus = focus_entry.and_then(|e| order.iter().position(|&x| x == e));
             i.anchor = i.focus;
             i.order = order;
@@ -126,7 +126,7 @@ impl ListingModel {
             }
             i.selected.resize(i.entries.len(), false);
             let new: Vec<u32> = (base as u32..i.entries.len() as u32)
-                .filter(|&x| Self::visible(&i, x))
+                .filter(|&x| Self::visible(i, x))
                 .collect();
             i.order.extend(new);
             let (entries, scores) = (i.entries.clone(), std::mem::take(&mut i.scores));
@@ -163,8 +163,12 @@ impl ListingModel {
         }
     }
 
-    pub fn set_want_thumbs(&self, want: bool) {
-        self.inner.borrow_mut().want_thumbs = want;
+    pub fn set_display(&self, want_thumbs: bool, hide_extensions: bool) {
+        {
+            let mut i = self.inner.borrow_mut();
+            i.want_thumbs = want_thumbs;
+            i.hide_extensions = hide_extensions;
+        }
         self.notify.reset();
     }
 
@@ -374,6 +378,19 @@ impl ListingModel {
     }
 }
 
+/// Name as shown. Known types (those with a kind) lose their extension when the option is on;
+/// unknown types and dotfiles keep it, as in Explorer.
+fn display_name(e: &Entry, hide_extensions: bool) -> &str {
+    if hide_extensions
+        && !e.is_dir()
+        && e.kind != Kind::File
+        && let Some((stem, _)) = e.name.rsplit_once('.').filter(|(stem, _)| !stem.is_empty())
+    {
+        return stem;
+    }
+    &e.name
+}
+
 impl Model for ListingModel {
     type Data = FileRow;
 
@@ -395,7 +412,7 @@ impl Model for ListingModel {
                 .request(i.generation, idx as u64, e.path_in(&i.folder), e.mtime);
         }
         Some(FileRow {
-            name: SharedString::from(&*e.name),
+            name: display_name(e, i.hide_extensions).into(),
             kind: e.kind as i32,
             type_name: e.kind.label().into(),
             size: if e.is_dir() {
@@ -419,5 +436,19 @@ impl Model for ListingModel {
 
     fn model_tracker(&self) -> &dyn ModelTracker {
         &self.notify
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn hides_only_known_extensions() {
+        let e = |n: &str| Entry::new(n.into(), false, 0, 0, 0);
+        assert_eq!(display_name(&e("photo.png"), true), "photo");
+        assert_eq!(display_name(&e("photo.png"), false), "photo.png");
+        assert_eq!(display_name(&e("data.xyz"), true), "data.xyz");
+        assert_eq!(display_name(&e(".bashrc"), true), ".bashrc");
     }
 }

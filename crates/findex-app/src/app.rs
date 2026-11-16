@@ -100,7 +100,10 @@ pub struct App {
     clipboard: Option<(Vec<PathBuf>, bool)>,
     queue: Queue,
     thumbs: findex_thumbs::Service,
+    /// Drives as shown (after "Hide empty drives"); `all_drives` keeps the full list.
     drives: Vec<Drive>,
+    all_drives: Vec<Drive>,
+    options: OptionsWindow,
     nav_targets: Vec<NavTarget>,
     places: Vec<(String, PathBuf, &'static str)>,
     settings: Settings,
@@ -133,6 +136,18 @@ pub fn start(ui: AppWindow, start: Option<PathBuf>) {
     let jobs_model = Rc::new(VecModel::default());
     ui.set_tabs(ModelRc::from(tabs_model.clone()));
     ui.set_jobs(ModelRc::from(jobs_model.clone()));
+    let options = OptionsWindow::new().expect("create options window");
+    options.on_apply(|o| with_app(|app| app.apply_options(&o)));
+    options.on_restore_defaults(|| {
+        with_app(|app| {
+            let theme = app.settings.theme;
+            let mut d = Settings::default().to_options();
+            d.theme = theme;
+            app.options.set_opts(d);
+        })
+    });
+    options.on_toggle_default_fm(|| with_app(|app| app.toggle_default_fm()));
+    options.on_close_requested(|| with_app(|app| drop(app.options.hide())));
     let transfer = TransferWindow::new().expect("create transfer window");
     transfer.set_jobs(ModelRc::from(jobs_model.clone()));
     transfer.on_pause(|id| with_app(|app| app.job_pause(id as u64)));
@@ -154,6 +169,8 @@ pub fn start(ui: AppWindow, start: Option<PathBuf>) {
         queue,
         thumbs,
         drives: Vec::new(),
+        all_drives: Vec::new(),
+        options,
         nav_targets: Vec::new(),
         places: findex_platform::places(),
         settings,
@@ -169,17 +186,34 @@ pub fn start(ui: AppWindow, start: Option<PathBuf>) {
         default_fm: false,
     };
     app.apply_settings();
-    let (path, select) = match start {
-        Some(p) if p.is_file() => (
-            p.parent().map(Path::to_path_buf),
-            p.file_name().map(|n| vec![n.to_os_string()]),
-        ),
-        Some(p) => (Some(p), None),
-        None => (dirs::home_dir(), None),
+    let restored: Vec<PathBuf> = if start.is_none() && app.settings.restore_tabs {
+        app.settings
+            .tabs
+            .iter()
+            .filter(|p| p.is_dir())
+            .cloned()
+            .collect()
+    } else {
+        Vec::new()
     };
-    app.new_tab(path);
-    if let Some(names) = select {
-        app.tabs[0].pending_select = names;
+    if restored.is_empty() {
+        let (path, select) = match start {
+            Some(p) if p.is_file() => (
+                p.parent().map(Path::to_path_buf),
+                p.file_name().map(|n| vec![n.to_os_string()]),
+            ),
+            Some(p) => (Some(p), None),
+            None => (app.start_location(), None),
+        };
+        app.new_tab(path);
+        if let Some(names) = select {
+            app.tabs[0].pending_select = names;
+        }
+    } else {
+        for p in restored {
+            app.new_tab(Some(p));
+        }
+        app.switch_tab(0);
     }
     APP.with(|c| *c.borrow_mut() = Some(app));
     wire(&ui);
@@ -235,12 +269,20 @@ fn wire(ui: &AppWindow) {
     on!(on_go_forward, |app| app.forward());
     on!(on_go_up, |app| app.up());
     on!(on_refresh, |app| app.reload());
-    on!(on_new_tab, |app| app.new_tab(dirs::home_dir()));
+    on!(on_new_tab, |app| {
+        let p = app.start_location();
+        app.new_tab(p)
+    });
     on!(on_close_tab, |app, i| app.close_tab(i as usize));
     on!(on_select_tab, |app, i| app.switch_tab(i as usize));
     on!(on_item_down, |app, i, ctrl, shift, right| app
         .item_down(i as usize, ctrl, shift, right));
-    on!(on_item_activated, |app, i| app.activate(i as usize));
+    on!(on_item_activated, |app, i| {
+        // With single-click opening, the press already opened the item.
+        if !app.settings.single_click {
+            app.activate(i as usize)
+        }
+    });
     on!(on_background_down, |app, _right| {
         app.tab().model.clear_selection();
         app.update_status();
@@ -290,8 +332,9 @@ fn wire(ui: &AppWindow) {
     });
     on!(on_toggle_default_fm, |app| app.toggle_default_fm());
     on!(on_undo, |app| app.do_undo());
-    on!(on_window_changed, |_app| ());
+    on!(on_window_changed, |_app| {});
     on!(on_show_transfers, |app| app.show_transfers(false));
+    on!(on_show_options, |app| app.show_options());
     ui.on_key(move |text, ctrl, shift, alt, typing| {
         let mut handled = false;
         with_app(|app| handled = app.key(&text, ctrl, shift, alt, typing));
@@ -316,7 +359,11 @@ impl App {
 
     fn apply_settings(&mut self) {
         let s = self.settings.clone();
-        for theme in [self.ui.global::<Theme>(), self.transfer.global::<Theme>()] {
+        for theme in [
+            self.ui.global::<Theme>(),
+            self.transfer.global::<Theme>(),
+            self.options.global::<Theme>(),
+        ] {
             theme.set_transparency(s.transparency);
             theme.set_compact(s.compact);
         }
@@ -324,10 +371,74 @@ impl App {
         self.ui.set_show_hidden(s.show_hidden);
         self.ui.set_view_mode(s.view);
         self.ui.set_details_pane(s.details_pane);
+        self.ui.set_check_boxes(s.check_boxes);
+        self.ui.set_status_bar(s.show_status_bar);
         if s.theme != 0 {
             self.set_color_scheme(s.theme == 2);
         }
+        let want = self.want_thumbs();
+        for t in &self.tabs {
+            t.model.set_display(want, s.hide_extensions);
+            t.model.set_show_hidden(s.show_hidden);
+        }
+        // Newly shown hidden items must take their sorted place.
+        for i in 0..self.tabs.len() {
+            self.resort(i);
+        }
+        // Before the first tab exists there is nothing on screen to refresh.
+        if !self.tabs.is_empty() {
+            let all = self.all_drives.clone();
+            self.set_drives(all);
+            self.refresh_ui();
+        }
         s.save();
+    }
+
+    fn want_thumbs(&self) -> bool {
+        self.settings.view != 5 && !self.settings.never_thumbnails
+    }
+
+    /// Where Findex and new tabs open ("Open Findex to").
+    fn start_location(&self) -> Option<PathBuf> {
+        if self.settings.open_to_this_pc {
+            None
+        } else {
+            dirs::home_dir()
+        }
+    }
+
+    // ---------------- options window ----------------
+
+    fn show_options(&mut self) {
+        self.options.set_opts(self.settings.to_options());
+        self.options.set_page(0);
+        self.set_default_fm_state(self.default_fm);
+        if !self.options.window().is_visible() {
+            let _ = self.options.show();
+            Timer::single_shot(Duration::ZERO, || {
+                with_app(|app| apply_effects(app.options.window(), &app.options.global::<Theme>()))
+            });
+        }
+    }
+
+    fn apply_options(&mut self, o: &Options) {
+        let old_theme = self.settings.theme;
+        self.settings.set_options(o);
+        let theme = self.settings.theme;
+        self.apply_settings();
+        if theme == 0 && old_theme != 0 {
+            self.set_theme(0);
+        }
+    }
+
+    pub fn options_window(&self) -> &OptionsWindow {
+        &self.options
+    }
+
+    /// Remembers open folder tabs for "Restore previous folder tabs at startup". Called at exit.
+    pub fn save_session(&mut self) {
+        self.settings.tabs = self.tabs.iter().filter_map(|t| t.path.clone()).collect();
+        self.settings.save_now();
     }
 
     fn set_color_scheme(&self, dark: bool) {
@@ -338,6 +449,7 @@ impl App {
         };
         self.ui.global::<Palette>().set_color_scheme(scheme);
         self.transfer.global::<Palette>().set_color_scheme(scheme);
+        self.options.global::<Palette>().set_color_scheme(scheme);
     }
 
     fn set_theme(&mut self, mode: i32) {
@@ -383,7 +495,7 @@ impl App {
 
     fn new_tab(&mut self, path: Option<PathBuf>) {
         let model = Rc::new(ListingModel::new(self.thumbs.clone()));
-        model.inner.borrow_mut().want_thumbs = self.settings.view != 5;
+        model.set_display(self.want_thumbs(), self.settings.hide_extensions);
         self.tabs.push(Tab {
             path: None,
             history: History::default(),
@@ -443,7 +555,7 @@ impl App {
             .tabs
             .iter()
             .map(|t| TabData {
-                title: tab_title(t).into(),
+                title: tab_title(t, self.settings.full_path_title).into(),
                 tooltip: t
                     .path
                     .as_ref()
@@ -556,10 +668,10 @@ impl App {
             tab.loading = false;
             if !tab.pending_select.is_empty() {
                 let names = std::mem::take(&mut tab.pending_select);
-                if let Some(r) = tab.model.select_names(&names) {
-                    if is_active {
-                        self.ui.set_focus_row(r as i32);
-                    }
+                if let Some(r) = tab.model.select_names(&names)
+                    && is_active
+                {
+                    self.ui.set_focus_row(r as i32);
                 }
                 if std::mem::take(&mut tab.rename_after) && is_active {
                     self.rename_start();
@@ -657,7 +769,7 @@ impl App {
         ui.set_can_up(tab.path.is_some());
         ui.set_sort_key(tab.sort.key.index());
         ui.set_sort_desc(tab.sort.descending);
-        ui.set_folder_name(tab_title(tab).into());
+        ui.set_folder_name(tab_title(tab, false).into());
         ui.set_path_text(
             tab.path
                 .as_ref()
@@ -762,7 +874,8 @@ impl App {
             });
             targets.push(t);
         };
-        for (label, path, icon) in &self.places {
+        let s = &self.settings;
+        for (label, path, icon) in self.places.iter().filter(|_| s.nav_places) {
             push(
                 &mut items,
                 label,
@@ -772,16 +885,24 @@ impl App {
                 NavTarget::Path(path.clone()),
             );
         }
-        push(&mut items, "", "", 2, false, NavTarget::None);
-        push(
-            &mut items,
-            "This PC",
-            "pc",
-            0,
-            current.is_none(),
-            NavTarget::ThisPc,
-        );
+        if s.nav_places && (s.nav_this_pc || s.nav_network) {
+            push(&mut items, "", "", 2, false, NavTarget::None);
+        }
+        if s.nav_this_pc {
+            push(
+                &mut items,
+                "This PC",
+                "pc",
+                0,
+                current.is_none(),
+                NavTarget::ThisPc,
+            );
+        }
         for (i, d) in self.drives.iter().enumerate() {
+            let network = d.kind == DriveKind::Network;
+            if (network && !s.nav_network) || (!network && !s.nav_this_pc) {
+                continue;
+            }
             let icon = match d.kind {
                 DriveKind::Removable => "usb",
                 DriveKind::Network => "network",
@@ -790,7 +911,7 @@ impl App {
             let cur = !d.path.as_os_str().is_empty() && current.as_ref() == Some(&d.path);
             push(&mut items, &d.label, icon, 1, cur, NavTarget::Drive(i));
         }
-        if let Some(trash) = findex_platform::trash_dir().filter(|t| t.is_dir()) {
+        if let Some(trash) = findex_platform::trash_dir().filter(|t| s.nav_trash && t.is_dir()) {
             push(&mut items, "", "", 2, false, NavTarget::None);
             push(
                 &mut items,
@@ -806,9 +927,35 @@ impl App {
     }
 
     fn set_drives(&mut self, drives: Vec<Drive>) {
-        self.drives = drives;
+        let (hide_empty, show_paths) = (
+            self.settings.hide_empty_drives,
+            self.settings.show_mount_paths,
+        );
+        self.all_drives = drives.clone();
+        self.drives = drives
+            .into_iter()
+            // "Hide empty drives": card readers and optical drives without media report no size.
+            .filter(|d| {
+                !(hide_empty
+                    && d.total == 0
+                    && matches!(d.kind, DriveKind::Removable | DriveKind::Optical))
+            })
+            .map(|mut d| {
+                // "Show drive letters": the "(C:)" / "(/media/x)" suffix.
+                if !show_paths
+                    && d.kind != DriveKind::Unmounted
+                    && let Some((name, _)) =
+                        d.label.rsplit_once(" (").filter(|_| d.label.ends_with(')'))
+                {
+                    d.label = name.to_string();
+                }
+                d
+            })
+            .collect();
         let to_data = |d: &Drive| {
-            let usage = if d.total > 0 {
+            // Unmounted volumes have a size but no free-space figure: no usage bar, no low-space warning.
+            let measured = d.total > 0 && d.kind != DriveKind::Unmounted;
+            let usage = if measured {
                 1.0 - d.free as f32 / d.total as f32
             } else {
                 -1.0
@@ -831,7 +978,7 @@ impl App {
                     _ => String::new(),
                 }
                 .into(),
-                low_space: d.total > 0 && (d.free as f64) < d.total as f64 * 0.1,
+                low_space: measured && (d.free as f64) < d.total as f64 * 0.1,
                 can_eject: d.kind == DriveKind::Removable && d.device.is_some(),
             }
         };
@@ -928,6 +1075,9 @@ impl App {
             m.select_only(row);
         }
         self.update_status();
+        if self.settings.single_click && !(right || ctrl || shift) {
+            self.activate(row);
+        }
     }
 
     fn activate(&mut self, row: usize) {
@@ -936,7 +1086,11 @@ impl App {
         };
         let path = self.tab().model.path_of(idx);
         if e.is_dir() {
-            self.navigate(Some(path), true);
+            if self.settings.folders_in_new_tab {
+                self.new_tab(Some(path));
+            } else {
+                self.navigate(Some(path), true);
+            }
         } else {
             std::thread::spawn(move || {
                 if let Err(err) = findex_platform::open_default(&path) {
@@ -967,20 +1121,30 @@ impl App {
         if tab.search.is_some() {
             return self.refresh_ui();
         }
+        self.resort(self.active);
+        self.refresh_ui();
+    }
+
+    /// Re-sorts a tab's listing off the UI thread (search results keep their ranking).
+    fn resort(&self, i: usize) {
+        let tab = &self.tabs[i];
+        if tab.search.is_some() {
+            return tab.model.add_hits(Vec::new());
+        }
         let (entries, generation) = tab.model.sort_key();
         let sort = tab.sort;
         std::thread::spawn(move || {
             let order = findex_core::sort_order(&entries, sort);
             post(move |app| app.on_listing(generation, Listing::Order(order)));
         });
-        self.refresh_ui();
     }
 
     fn set_view(&mut self, mode: i32) {
         self.settings.view = mode;
         self.ui.set_view_mode(mode);
+        let (want, hide_ext) = (self.want_thumbs(), self.settings.hide_extensions);
         for t in &self.tabs {
-            t.model.set_want_thumbs(mode != 5);
+            t.model.set_display(want, hide_ext);
         }
         self.settings.save();
     }
@@ -990,6 +1154,9 @@ impl App {
         self.ui.set_show_hidden(show);
         for t in &self.tabs {
             t.model.set_show_hidden(show);
+        }
+        for i in 0..self.tabs.len() {
+            self.resort(i);
         }
         self.settings.save();
         self.update_status();
@@ -1019,7 +1186,8 @@ impl App {
         }
         let generation = self.next_generation;
         self.next_generation += 1;
-        let show_hidden = self.settings.show_hidden;
+        let show_hidden = self.settings.show_hidden || self.settings.search_hidden;
+        let recursive = self.settings.search_subfolders;
         let tab = &mut self.tabs[self.active];
         tab.cancel.cancel();
         tab.cancel = Cancel::default();
@@ -1041,6 +1209,7 @@ impl App {
                 let send = move |msg: Listing| post(move |app| app.on_listing(generation, msg));
                 let opts = findex_scan::Options {
                     include_hidden: show_hidden,
+                    recursive,
                     ..Default::default()
                 };
                 let mut buf: Vec<(Entry, u32)> = Vec::new();
@@ -1556,15 +1725,16 @@ impl App {
 
     fn set_default_fm_state(&mut self, is_default: bool) {
         self.default_fm = is_default;
+        let text: SharedString = if is_default {
+            "Findex opens folders, and Super+E / Win+E opens Findex."
+        } else {
+            "Another app opens folders by default."
+        }
+        .into();
         self.ui.set_default_fm(is_default);
-        self.ui.set_default_fm_text(
-            if is_default {
-                "Findex opens folders and Super+E / Win+E."
-            } else {
-                "Another app opens folders by default."
-            }
-            .into(),
-        );
+        self.ui.set_default_fm_text(text.clone());
+        self.options.set_default_fm(is_default);
+        self.options.set_default_fm_text(text);
     }
 
     fn toggle_default_fm(&mut self) {
@@ -1687,6 +1857,16 @@ impl App {
             return true;
         }
         if typing {
+            // Down from the search box moves into the results.
+            if key_is(text, Key::DownArrow)
+                && self.tab().search.is_some()
+                && self.tab().model.len() > 0
+            {
+                self.ui.invoke_focus_list();
+                self.tab().model.move_focus(0, false, false);
+                self.update_status();
+                return true;
+            }
             return false;
         }
 
@@ -1753,11 +1933,9 @@ impl App {
         }
         if ctrl {
             // Ctrl+Shift+1..8 picks a view; with Shift the text may be the shifted symbol.
-            if shift {
-                if let Some(v) = "!@#$%^&*".find(text).or_else(|| "12345678".find(text)) {
-                    self.set_view(v as i32);
-                    return true;
-                }
+            if shift && let Some(v) = "!@#$%^&*".find(text).or_else(|| "12345678".find(text)) {
+                self.set_view(v as i32);
+                return true;
             }
             match (lower.as_str(), shift) {
                 ("a", false) => {
@@ -1781,6 +1959,12 @@ impl App {
             }
             return true;
         }
+        // "When typing into list view: Automatically type into the Search Box".
+        if printable && !alt && self.settings.typing_searches {
+            self.ui.invoke_type_into_search(text.into());
+            self.search_edited(text.to_string());
+            return true;
+        }
         // Type-ahead: jump to the next item starting with the typed letters.
         if printable && !alt {
             if self.type_ahead.1.elapsed() > Duration::from_millis(1000) {
@@ -1798,10 +1982,12 @@ impl App {
     }
 }
 
-fn tab_title(t: &Tab) -> String {
+/// Tab title; `full_path` is the "Display the full path in the title bar" option.
+fn tab_title(t: &Tab, full_path: bool) -> String {
     match (&t.path, &t.search) {
         (_, Some(q)) => format!("Search: {q}"),
         (None, _) => "This PC".into(),
+        (Some(p), _) if full_path => p.display().to_string(),
         (Some(p), _) if Some(p) == dirs::home_dir().as_ref() => "Home".into(),
         (Some(p), _) => p
             .file_name()

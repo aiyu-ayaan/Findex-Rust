@@ -24,6 +24,8 @@ pub struct Options {
     pub include_hidden: bool,
     /// Stop after this many matches.
     pub max_results: usize,
+    /// Search subfolders; when false only the starting folder is searched.
+    pub recursive: bool,
 }
 
 impl Default for Options {
@@ -31,6 +33,7 @@ impl Default for Options {
         Options {
             include_hidden: false,
             max_results: 20_000,
+            recursive: true,
         }
     }
 }
@@ -102,6 +105,9 @@ pub fn search(
         if found.load(Relaxed) >= opts.max_results {
             break;
         }
+        if !opts.recursive {
+            break;
+        }
         level = next.into_inner().unwrap();
     }
 }
@@ -133,5 +139,15 @@ mod tests {
         std::fs::write(t.path().join("a/zzz.txt"), b"").unwrap();
         let hits = search_all(t.path(), "fobr");
         assert_eq!(hits, vec![t.path().join("a/b/c/foo_bar.txt")]);
+        // current folder only
+        let mut n = 0;
+        let opts = Options {
+            recursive: false,
+            ..Default::default()
+        };
+        search(t.path(), "fobr", &opts, &Cancel::default(), &mut |h| {
+            n += h.len()
+        });
+        assert_eq!(n, 0);
     }
 }

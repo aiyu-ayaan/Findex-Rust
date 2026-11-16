@@ -25,15 +25,16 @@ pub fn parse_location(s: &str) -> PathBuf {
         let mut out = Vec::with_capacity(bytes.len());
         let mut i = 0;
         while i < bytes.len() {
-            if bytes[i] == b'%' && i + 2 < bytes.len() + 0 {
-                if let Ok(v) = u8::from_str_radix(
+            if bytes[i] == b'%'
+                && i + 2 < bytes.len()
+                && let Ok(v) = u8::from_str_radix(
                     std::str::from_utf8(&bytes[i + 1..i + 3]).unwrap_or("zz"),
                     16,
-                ) {
-                    out.push(v);
-                    i += 3;
-                    continue;
-                }
+                )
+            {
+                out.push(v);
+                i += 3;
+                continue;
             }
             out.push(bytes[i]);
             i += 1;
@@ -47,10 +48,10 @@ pub fn parse_location(s: &str) -> PathBuf {
         };
         return PathBuf::from(trimmed);
     }
-    if let Some(rest) = s.strip_prefix('~') {
-        if let Some(h) = dirs::home_dir() {
-            return h.join(rest.trim_start_matches(['/', '\\']));
-        }
+    if let Some(rest) = s.strip_prefix('~')
+        && let Some(h) = dirs::home_dir()
+    {
+        return h.join(rest.trim_start_matches(['/', '\\']));
     }
     PathBuf::from(s)
 }
@@ -131,6 +132,7 @@ fn main() {
         ui_test::start(&ui, &script, out);
     }
     slint::run_event_loop_until_quit().expect("event loop");
+    app::with_app(|a| a.save_session());
 }
 
 #[cfg(test)]
