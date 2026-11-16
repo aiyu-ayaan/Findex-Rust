@@ -1,0 +1,43 @@
+[workspace]
+resolver = "3"
+members = ["crates/*"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.88"
+license = "GPL-3.0-only"
+repository = "https://github.com/aiyu-ayaan/findex-rust"
+
+[workspace.dependencies]
+findex-core = { path = "crates/findex-core" }
+findex-platform = { path = "crates/findex-platform" }
+findex-platform-linux = { path = "crates/findex-platform-linux" }
+findex-platform-win = { path = "crates/findex-platform-win" }
+findex-ops = { path = "crates/findex-ops" }
+findex-scan = { path = "crates/findex-scan" }
+findex-thumbs = { path = "crates/findex-thumbs" }
+findex-ui = { path = "crates/findex-ui" }
+
+slint = { version = "1.19", default-features = false }
+slint-build = "1.19"
+nucleo-matcher = "0.3"
+chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
+dirs = "6"
+trash = "5"
+rustix = { version = "1", features = ["fs"] }
+raw-window-handle = "0.6"
+image = { version = "0.25", default-features = false, features = ["jpeg", "png", "gif", "webp", "bmp", "ico", "tiff"] }
+png = "0.18"
+md-5 = "0.10"
+windows-sys = "0.61"
+tempfile = "3"
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
+panic = "abort"
+strip = true
+
+[profile.dev.package."*"]
+opt-level = 2
