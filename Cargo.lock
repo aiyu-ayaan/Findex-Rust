@@ -161,6 +161,11 @@ dependencies = [
 [[package]]
 name = "findex-scan"
 version = "0.1.0"
+dependencies = [
+ "findex-core",
+ "findex-platform",
+ "tempfile",
+]
 
 [[package]]
 name = "findex-thumbs"
