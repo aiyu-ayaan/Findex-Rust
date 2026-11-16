@@ -228,11 +228,17 @@ export component DialogButton inherits Rectangle {
     accessible-role: button;
     accessible-label: text;
     accessible-action-default => { clicked(); }
-    Text {
-        text: root.text;
-        color: primary ? Theme.on-accent : Theme.text-primary;
-        horizontal-alignment: center;
-        vertical-alignment: center;
+    HorizontalLayout {
+        padding-left: 12px;
+        padding-right: 12px;
+        alignment: center;
+        Text {
+            text: root.text;
+            color: primary ? Theme.on-accent : Theme.text-primary;
+            font-size: Theme.font-body;
+            horizontal-alignment: center;
+            vertical-alignment: center;
+        }
     }
     fs := FocusScope {
         key-pressed(e) => {
