@@ -403,11 +403,7 @@ impl Model for ListingModel {
         let idx = *i.order.get(row)?;
         let e = &i.entries[idx as usize];
         let thumb = i.thumbs.get(&idx).cloned();
-        if thumb.is_none()
-            && i.want_thumbs
-            && e.kind == Kind::Image
-            && findex_thumbs::supported(&e.name)
-        {
+        if thumb.is_none() && i.want_thumbs && findex_thumbs::supported(&e.name) {
             self.thumbs
                 .request(i.generation, idx as u64, e.path_in(&i.folder), e.mtime);
         }

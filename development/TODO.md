@@ -75,7 +75,7 @@ Legend: `[ ]` open, `[x]` done. P0 = v1.0 blocker, P1 = v1.0 target, P2 = later.
 - [x] Freedesktop cache read/write
 - [ ] Windows shell thumbnails on STA thread
 - [ ] Image, SVG decoders with size/time limits (raster images done; SVG open)
-- [ ] Video, PDF, audio cover, text, Office embedded thumbnails
+- [ ] PDF, audio cover, text, Office embedded thumbnails (video done via ffmpegthumbnailer / ffmpeg when installed; HEIC open)
 - [ ] Details and preview panes (details pane done)
 - [ ] Remaining view modes and zoom (all modes done; zoom open)
 

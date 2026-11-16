@@ -3,7 +3,8 @@
 //! Cache layout follows the freedesktop Thumbnail Managing Standard (`normal/<md5(uri)>.png` with
 //! `Thumb::URI` and `Thumb::MTime`), so on Linux Findex shares thumbnails with Nautilus, Dolphin and others.
 //! Requests are served newest-first, which keeps the rows currently on screen at the front of the queue.
-//! shortcut: images only (via `image`); video, PDF and audio covers need external decoders (M4).
+//! Images decode in-process (`image`). Video frames come from `ffmpegthumbnailer` or `ffmpeg` when installed.
+//! shortcut: PDF, audio covers and HEIC are not decoded yet (M4).
 
 use std::collections::HashSet;
 use std::fs::File;
@@ -108,6 +109,74 @@ fn write_cached(path: &Path, uri: &str, mtime: i64, t: &Thumb) -> std::io::Resul
     std::fs::rename(&tmp, path)
 }
 
+const VIDEO_EXT: &[&str] = &[
+    "mp4", "mkv", "webm", "avi", "mov", "m4v", "wmv", "flv", "mpg", "mpeg", "ogv", "3gp", "ts",
+];
+const VIDEO_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(10);
+static TMP_ID: AtomicU64 = AtomicU64::new(0);
+
+fn is_video(path: &Path) -> bool {
+    path.extension()
+        .and_then(|e| e.to_str())
+        .is_some_and(|e| VIDEO_EXT.contains(&e.to_ascii_lowercase().as_str()))
+}
+
+/// Runs `cmd`, killing it after `VIDEO_TIMEOUT`. True when it exited successfully.
+fn run_limited(mut cmd: std::process::Command) -> bool {
+    use std::process::Stdio;
+    let Ok(mut child) = cmd
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn()
+    else {
+        return false;
+    };
+    let start = std::time::Instant::now();
+    loop {
+        match child.try_wait() {
+            Ok(Some(s)) => return s.success(),
+            Ok(None) if start.elapsed() < VIDEO_TIMEOUT => {
+                std::thread::sleep(std::time::Duration::from_millis(20))
+            }
+            _ => {
+                let _ = child.kill();
+                let _ = child.wait();
+                return false;
+            }
+        }
+    }
+}
+
+/// A frame from the video, scaled to `SIZE`, through ffmpegthumbnailer or ffmpeg.
+fn decode_video(path: &Path, tmp_dir: &Path) -> Option<Thumb> {
+    std::fs::create_dir_all(tmp_dir).ok()?;
+    let out = tmp_dir.join(format!(
+        ".findex-vid-{}-{}.png",
+        std::process::id(),
+        TMP_ID.fetch_add(1, Relaxed)
+    ));
+    let mut a = std::process::Command::new("ffmpegthumbnailer");
+    a.arg("-i")
+        .arg(path)
+        .arg("-o")
+        .arg(&out)
+        .args(["-s", &SIZE.to_string(), "-t", "10%"]);
+    let mut b = std::process::Command::new("ffmpeg");
+    b.args(["-v", "error", "-y", "-ss", "1", "-i"])
+        .arg(path)
+        .args(["-frames:v", "1", "-vf"])
+        .arg(format!(
+            "scale={SIZE}:{SIZE}:force_original_aspect_ratio=decrease"
+        ))
+        .arg(&out);
+    let t = (run_limited(a) || run_limited(b))
+        .then(|| decode(&out))
+        .flatten();
+    let _ = std::fs::remove_file(&out);
+    t
+}
+
 fn decode(path: &Path) -> Option<Thumb> {
     if std::fs::metadata(path).ok()?.len() > MAX_FILE_BYTES {
         return None;
@@ -136,7 +205,11 @@ pub fn thumbnail(path: &Path, mtime: i64, cache_dir: &Path) -> Option<Thumb> {
     if let Some(t) = read_cached(&cached, mtime) {
         return Some(t);
     }
-    let t = decode(path)?;
+    let t = if is_video(path) {
+        decode_video(path, cached.parent()?)?
+    } else {
+        decode(path)?
+    };
     let _ = write_cached(&cached, &uri, mtime, &t);
     Some(t)
 }
@@ -150,7 +223,7 @@ pub fn supported(name: &str) -> bool {
     matches!(
         ext.as_str(),
         "png" | "jpg" | "jpeg" | "gif" | "webp" | "bmp" | "ico" | "tif" | "tiff"
-    )
+    ) || VIDEO_EXT.contains(&ext.as_str())
 }
 
 struct Request {
