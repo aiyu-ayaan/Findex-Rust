@@ -3,7 +3,7 @@ import { Palette } from "std-widgets.slint";
 import "fonts/Inter.ttf";
 import { Theme } from "theme.slint";
 import { Icons } from "icons.slint";
-import { MenuRow, Flyout, HDivider, IconButton, LoadingBar } from "controls.slint";
+import { DialogButton, MenuRow, Flyout, HDivider, IconButton, LoadingBar } from "controls.slint";
 import { FileRow, TabData, Crumb, NavItem, DriveData, JobData, Details } from "types.slint";
 import { TabStrip, CommandBar, AddressBar } from "chrome.slint";
 import { DetailsView, GridView } from "fileviews.slint";
@@ -330,16 +330,10 @@ export component AppWindow inherits Window {
                             }
                             if root.error-text != "": HorizontalLayout {
                                 alignment: center;
-                                Rectangle {
-                                    width: 96px;
-                                    height: 32px;
-                                    border-radius: Theme.radius;
-                                    background: Theme.accent;
-                                    accessible-role: button;
-                                    accessible-label: "Retry";
-                                    accessible-action-default => { root.refresh(); }
-                                    Text { text: "Retry"; color: Theme.on-accent; }
-                                    TouchArea { clicked => { root.refresh(); } }
+                                DialogButton {
+                                    text: "Retry";
+                                    primary: true;
+                                    clicked => { root.refresh(); }
                                 }
                             }
                         }
