@@ -8,7 +8,7 @@ use std::path::{Path, PathBuf};
 use std::rc::Rc;
 use std::time::{Duration, Instant};
 
-use findex_core::{Cancel, Drive, DriveKind, Entry, History, Kind, Sort, SortKey, format};
+use findex_core::{Cancel, Drive, DriveKind, Entry, History, Sort, SortKey, format};
 use findex_ops::{Job, JobKind, Queue, Status};
 use findex_ui::*;
 use slint::platform::Key;
@@ -883,7 +883,7 @@ impl App {
                 if let Some(img) = model.inner.borrow().thumbs.get(&idx) {
                     d.thumb = img.clone();
                     d.has_thumb = true;
-                } else if e.kind == Kind::Image && findex_thumbs::supported(&e.name) {
+                } else if findex_thumbs::supported(&e.name) {
                     self.thumbs
                         .request(tab.generation, idx as u64, e.path_in(&folder), e.mtime);
                 }

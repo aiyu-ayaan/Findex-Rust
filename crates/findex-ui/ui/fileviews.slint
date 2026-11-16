@@ -299,14 +299,21 @@ component GridCell inherits Rectangle {
             alignment: center;
             FileIcon { size: icon; kind: item.kind; thumb: item.thumb; has-thumb: item.has-thumb; hidden: item.hidden; }
         }
-        Text {
-            text: item.name;
-            color: Theme.text-primary;
-            horizontal-alignment: center;
-            wrap: word-wrap;
-            overflow: elide;
-            max-height: 2 * 19px;
-            font-size: mode == 2 ? Theme.font-caption : Theme.font-body;
+        // Fixed height: long names are cut with an ellipsis instead of spilling into the next row.
+        Rectangle {
+            height: (mode == 0 ? 3 : 2) * (mode == 2 ? 16px : 19px);
+            clip: true;
+            Text {
+                width: parent.width;
+                height: parent.height;
+                text: item.name;
+                color: Theme.text-primary;
+                horizontal-alignment: center;
+                vertical-alignment: top;
+                wrap: word-wrap;
+                overflow: elide;
+                font-size: mode == 2 ? Theme.font-caption : Theme.font-body;
+            }
         }
     }
     // small icons and list (3, 4)

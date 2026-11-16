@@ -287,14 +287,21 @@ export component OptionsWindow inherits Window {
                     }
                 }
             }
+            // Opaque footer so scrolled content never shows behind the buttons.
+            Rectangle {
+                height: 64px;
+                background: Theme.mica;
+                border-radius: Theme.radius-overlay;
             HorizontalLayout {
                 padding: 16px;
+                padding-top: 16px;
                 spacing: 8px;
                 DialogButton { text: "Restore Defaults"; min-width: 140px; clicked => { root.restore-defaults(); } }
                 Rectangle { horizontal-stretch: 1; }
                 DialogButton { text: "OK"; primary: true; min-width: 80px; clicked => { root.apply(opts); root.close-requested(); } }
                 DialogButton { text: "Cancel"; min-width: 80px; clicked => { root.close-requested(); } }
                 DialogButton { text: "Apply"; min-width: 80px; clicked => { root.apply(opts); } }
+            }
             }
         }
     }
