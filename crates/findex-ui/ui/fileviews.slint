@@ -35,6 +35,31 @@ export component FileIcon inherits Rectangle {
     }
 }
 
+/// Selection check box (setting "Use check boxes to select items"). Clicking it toggles like Ctrl+click.
+component SelectBox inherits Rectangle {
+    in property <bool> checked;
+    in property <bool> show;
+    in property <int> index;
+    callback item-down(int, bool, bool, bool, length, length);
+    width: 24px;
+    height: 24px;
+    accessible-role: checkbox;
+    accessible-checked: checked;
+    accessible-label: "Select";
+    if show: Rectangle {
+        width: 16px;
+        height: 16px;
+        border-radius: Theme.radius;
+        border-width: checked ? 0px : 1px;
+        border-color: Theme.text-secondary;
+        background: checked ? Theme.accent : Theme.control;
+        if checked: Image { source: Icons.check; width: 12px; height: 12px; colorize: Theme.on-accent; accessible-role: none; }
+    }
+    if show: TouchArea {
+        clicked => { root.item-down(index, true, false, false, 0, 0); }
+    }
+}
+
 /// Pointer handling shared by rows and cells: left/right press with modifiers, double-click to open.
 component ItemTouch inherits TouchArea {
     in property <int> index;
@@ -138,6 +163,7 @@ export component DetailsView inherits Rectangle {
     in property <bool> sort-desc;
     in property <int> focus-row;
     in property <bool> list-focused;
+    in property <bool> check-boxes;
     callback sort(int);
     callback item-down(int, bool, bool, bool, length, length);
     callback item-activated(int);
@@ -198,9 +224,16 @@ export component DetailsView inherits Rectangle {
                         Rectangle {
                             width: name-w;
                             HorizontalLayout {
-                                padding-left: 12px;
+                                padding-left: check-boxes ? 4px : 12px;
                                 padding-right: 8px;
                                 spacing: 8px;
+                                if check-boxes: SelectBox {
+                                    y: (parent.height - 24px) / 2;
+                                    show: true;
+                                    checked: row.selected;
+                                    index: i;
+                                    item-down(a, b, c, d, x, y) => { root.item-down(a, b, c, d, x, y); }
+                                }
                                 FileIcon {
                                     y: (parent.height - 16px) / 2;
                                     kind: row.kind;
@@ -239,6 +272,7 @@ component GridCell inherits Rectangle {
     in property <int> mode;
     in property <length> icon;
     in property <bool> focused;
+    in property <bool> check-boxes;
     callback item-down(int, bool, bool, bool, length, length);
     callback item-activated(int);
     accessible-role: list-item;
@@ -326,6 +360,14 @@ component GridCell inherits Rectangle {
         item-down(a, b, c, d, x, y) => { root.item-down(a, b, c, d, x, y); }
         item-activated(a) => { root.item-activated(a); }
     }
+    SelectBox {
+        x: 4px;
+        y: 4px;
+        show: check-boxes && (touch.has-hover || item.selected);
+        checked: item.selected;
+        index: root.index;
+        item-down(a, b, c, d, x, y) => { root.item-down(a, b, c, d, x, y); }
+    }
 }
 
 export component GridView inherits Rectangle {
@@ -333,6 +375,7 @@ export component GridView inherits Rectangle {
     in property <int> mode;
     in property <int> focus-row;
     in property <bool> list-focused;
+    in property <bool> check-boxes;
     callback item-down(int, bool, bool, bool, length, length);
     callback item-activated(int);
     callback background-down(bool, length, length);
@@ -371,6 +414,7 @@ export component GridView inherits Rectangle {
                 mode: root.mode;
                 icon: root.icon;
                 focused: root.list-focused && self.index == root.focus-row;
+                check-boxes: root.check-boxes;
                 item-down(i, ctl, sh, rt, x, y) => { root.item-down(i, ctl, sh, rt, x, y); }
                 item-activated(a) => { root.item-activated(a); }
             }

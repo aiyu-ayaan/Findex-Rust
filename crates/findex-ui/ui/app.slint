@@ -1,5 +1,4 @@
 // Findex main window: Windows 11 File Explorer layout, light and dark, translucent Mica-style surfaces.
-import { Switch } from "std-widgets.slint";
 import { Palette } from "std-widgets.slint";
 import "fonts/Inter.ttf";
 import { Theme } from "theme.slint";
@@ -11,8 +10,9 @@ import { DetailsView, GridView } from "fileviews.slint";
 import { NavPane, StatusBar, DetailsPane, ThisPcPage } from "panes.slint";
 import { Dialog, Toast } from "overlays.slint";
 import { TransferWindow } from "transfer.slint";
+import { OptionsWindow, Options } from "options.slint";
 
-export { TransferWindow, Theme, Palette, FileRow, TabData, Crumb, NavItem, DriveData, JobData, Details }
+export { TransferWindow, OptionsWindow, Options, Theme, Palette, FileRow, TabData, Crumb, NavItem, DriveData, JobData, Details }
 
 component CheckRow inherits MenuRow {
     in property <bool> checked;
@@ -20,26 +20,9 @@ component CheckRow inherits MenuRow {
     icon: checked ? Icons.check : blank;
 }
 
-component Segment inherits Rectangle {
-    in property <string> text;
-    in property <bool> selected;
-    callback clicked;
-    height: 32px;
-    border-radius: Theme.radius;
-    background: selected ? Theme.accent : t.has-hover ? Theme.subtle-hover : Theme.control;
-    border-width: selected ? 0px : 1px;
-    border-color: Theme.stroke-strong;
-    accessible-role: button;
-    accessible-label: text;
-    accessible-checked: selected;
-    accessible-action-default => { clicked(); }
-    Text { text: root.text; color: selected ? Theme.on-accent : Theme.text-primary; }
-    t := TouchArea { clicked => { root.clicked(); } }
-}
-
 export component AppWindow inherits Window {
     title: "Findex";
-    icon: Icons.folder-filled;
+    icon: Icons.app-icon;
     no-frame: true;
     resize-border-width: Theme.maximized ? 0px : 6px;
     background: transparent;
@@ -88,6 +71,8 @@ export component AppWindow inherits Window {
     in property <string> default-fm-text;
     in property <string> toast-text;
     in property <bool> toast-undo;
+    in property <bool> check-boxes;
+    in property <bool> status-bar: true;
     out property <int> grid-cols: grid.cols;
 
     // ---- requests to Rust ----
@@ -135,6 +120,7 @@ export component AppWindow inherits Window {
     callback undo();
     callback window-changed();
     callback show-transfers();
+    callback show-options();
 
     // ---- functions Rust calls ----
     public function show-rename(name: string) {
@@ -156,6 +142,7 @@ export component AppWindow inherits Window {
     }
     public function edit-path() { address.edit-path(); }
     public function focus-search() { address.focus-search(); }
+    public function type-into-search(t: string) { address.type-into-search(t); }
     public function show-context(x: length, y: length, on-item: bool) {
         menu-x = min(x, root.width - 268px);
         menu-y = min(y, root.height - (on-item ? 300px : 240px));
@@ -286,6 +273,7 @@ export component AppWindow inherits Window {
                             sort-desc: root.sort-desc;
                             focus-row: root.focus-row;
                             list-focused: list-scope.has-focus;
+                            check-boxes: root.check-boxes;
                             sort(k) => { root.sort-by(k, k == root.sort-key ? !root.sort-desc : false); }
                             item-down(i, ctrl, shift, right, x, y) => { root.on-item-down(i, ctrl, shift, right, x, y); }
                             item-activated(i) => { root.item-activated(i); }
@@ -297,6 +285,7 @@ export component AppWindow inherits Window {
                             mode: root.view-mode;
                             focus-row: root.focus-row;
                             list-focused: list-scope.has-focus;
+                            check-boxes: root.check-boxes;
                             item-down(i, ctrl, shift, right, x, y) => { root.on-item-down(i, ctrl, shift, right, x, y); }
                             item-activated(i) => { root.item-activated(i); }
                             background-down(right, x, y) => { root.on-background-down(right, x, y); }
@@ -344,7 +333,7 @@ export component AppWindow inherits Window {
                     details: root.details;
                 }
             }
-            StatusBar {
+            if root.status-bar: StatusBar {
                 left-text: root.status-text;
                 selection-text: root.selection-text;
                 active-jobs: root.active-jobs;
@@ -436,7 +425,7 @@ export component AppWindow inherits Window {
                 MenuRow { icon: Icons.undo; text: "Undo"; shortcut: "Ctrl+Z"; enabled: root.toast-undo; clicked => { root.undo(); } }
                 MenuRow { icon: Icons.transfer; text: "Transfers"; clicked => { root.show-transfers(); } }
                 HDivider { }
-                MenuRow { icon: Icons.settings; text: "Settings"; clicked => { settings-popup.show(); } }
+                MenuRow { icon: Icons.settings; text: "Options"; clicked => { root.show-options(); } }
             }
         }
     }
@@ -472,39 +461,6 @@ export component AppWindow inherits Window {
             }
         }
     }
-    settings-popup := PopupWindow {
-        x: root.width - 380px;
-        y: 96px;
-        close-policy: close-on-click-outside;
-        Flyout {
-            width: 360px;
-            height: stl.preferred-height;
-            stl := VerticalLayout {
-                padding: 16px;
-                spacing: 12px;
-                Text { text: "Settings"; color: Theme.text-primary; font-size: Theme.font-subtitle; font-weight: 600; }
-                Text { text: "App theme"; color: Theme.text-secondary; font-size: Theme.font-caption; }
-                HorizontalLayout {
-                    spacing: 4px;
-                    Segment { text: "System"; selected: root.theme-mode == 0; horizontal-stretch: 1; clicked => { root.set-theme(0); } }
-                    Segment { text: "Light"; selected: root.theme-mode == 1; horizontal-stretch: 1; clicked => { root.set-theme(1); } }
-                    Segment { text: "Dark"; selected: root.theme-mode == 2; horizontal-stretch: 1; clicked => { root.set-theme(2); } }
-                }
-                Switch { text: "Transparency effects"; checked: Theme.transparency; toggled => { root.set-transparency(self.checked); } }
-                Switch { text: "Show hidden items"; checked: root.show-hidden; toggled => { root.set-show-hidden(self.checked); } }
-                Switch { text: "Compact view"; checked: Theme.compact; toggled => { root.set-compact(self.checked); } }
-                HDivider { }
-                Text { text: "Default file manager"; color: Theme.text-secondary; font-size: Theme.font-caption; }
-                Text { text: root.default-fm-text; color: Theme.text-primary; wrap: word-wrap; }
-                Segment {
-                    text: root.default-fm ? "Restore previous file manager" : "Make Findex the default";
-                    selected: !root.default-fm;
-                    clicked => { root.toggle-default-fm(); }
-                }
-            }
-        }
-    }
-
     // ---- modal dialogs ----
     dialog := Dialog {
         visible: root.dialog-kind != 0;

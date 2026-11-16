@@ -266,6 +266,12 @@ export component TextField inherits Rectangle {
 
     public function select-all() { input.select-all(); }
     public function focus-input() { input.focus(); }
+    /// Puts text in the field and the caret after it (typing continues naturally).
+    public function type-text(t: string) {
+        input.text = t;
+        input.focus();
+        input.set-selection-offsets(t.character-count, t.character-count);
+    }
 
     touch := TouchArea { mouse-cursor: MouseCursor.text; }
     HorizontalLayout {

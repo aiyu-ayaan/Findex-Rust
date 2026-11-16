@@ -1,0 +1,284 @@
+// Options window, modelled on Explorer's Folder Options (General / View / Search) plus a Findex page.
+// Edits are staged: OK and Apply commit them, Cancel discards them.
+import { ScrollView, CheckBox } from "std-widgets.slint";
+import { Theme } from "theme.slint";
+import { Icons } from "icons.slint";
+import { DialogButton, HDivider } from "controls.slint";
+
+export struct Options {
+    // General
+    open-to-this-pc: bool,
+    folders-in-new-tab: bool,
+    single-click: bool,
+    // View: files and folders
+    never-thumbnails: bool,
+    full-path-title: bool,
+    show-hidden: bool,
+    hide-empty-drives: bool,
+    hide-extensions: bool,
+    restore-tabs: bool,
+    show-mount-paths: bool,
+    show-status-bar: bool,
+    check-boxes: bool,
+    typing-searches: bool,
+    // View: navigation pane
+    nav-places: bool,
+    nav-this-pc: bool,
+    nav-network: bool,
+    nav-trash: bool,
+    // Search
+    search-subfolders: bool,
+    search-hidden: bool,
+    // Findex
+    theme: int,
+    transparency: bool,
+    compact: bool,
+}
+
+component SectionTitle inherits Text {
+    color: Theme.text-primary;
+    font-weight: 600;
+    accessible-role: AccessibleRole.text;
+}
+
+/// Radio choice: 20 px circle with accent dot, whole row clickable, keyboard operable.
+component Radio inherits Rectangle {
+    in property <string> text;
+    in property <bool> checked;
+    callback clicked;
+    height: 28px;
+    accessible-role: radio-button;
+    accessible-label: text;
+    accessible-checked: checked;
+    accessible-action-default => { clicked(); }
+    forward-focus: fs;
+    HorizontalLayout {
+        spacing: 10px;
+        Rectangle {
+            width: 20px;
+            height: 20px;
+            y: (parent.height - 20px) / 2;
+            border-radius: 10px;
+            border-width: checked ? 0px : 1px;
+            border-color: Theme.text-secondary;
+            background: checked ? Theme.accent : Theme.control;
+            Rectangle {
+                width: checked ? 8px : 0px;
+                height: self.width;
+                border-radius: 4px;
+                background: Theme.on-accent;
+                animate width { duration: Theme.fast; }
+            }
+        }
+        Text { text: root.text; color: Theme.text-primary; vertical-alignment: center; wrap: word-wrap; horizontal-stretch: 1; }
+    }
+    fs := FocusScope {
+        key-pressed(e) => {
+            if e.text == " " || e.text == "\n" { root.clicked(); return accept; }
+            reject
+        }
+    }
+    TouchArea { clicked => { fs.focus(); root.clicked(); } }
+    if fs.has-focus: Rectangle {
+        x: -4px;
+        width: parent.width + 8px;
+        border-radius: Theme.radius;
+        border-width: 2px;
+        border-color: Theme.text-primary;
+    }
+}
+
+component Check inherits CheckBox {
+    height: 28px;
+    accessible-label: self.text;
+}
+
+component PageTab inherits Rectangle {
+    in property <string> text;
+    in property <bool> selected;
+    callback clicked;
+    width: label.preferred-width + 24px;
+    accessible-role: tab;
+    accessible-label: text;
+    accessible-item-selected: selected;
+    accessible-action-default => { clicked(); }
+    background: t.has-hover && !selected ? Theme.subtle-hover : transparent;
+    border-radius: Theme.radius;
+    label := Text {
+        text: root.text;
+        color: selected ? Theme.text-primary : Theme.text-secondary;
+        font-weight: selected ? 600 : 400;
+    }
+    // Selected tab: accent pill under the label (not colour-only: weight changes too).
+    Rectangle {
+        y: parent.height - 3px;
+        width: selected ? 16px : 0px;
+        height: 3px;
+        border-radius: 1.5px;
+        background: Theme.accent;
+        animate width { duration: Theme.base; easing: ease-out; }
+    }
+    t := TouchArea { clicked => { root.clicked(); } }
+}
+
+export component OptionsWindow inherits Window {
+    title: "Folder Options";
+    icon: Icons.settings;
+    no-frame: true;
+    background: transparent;
+    default-font-family: "Inter";
+    default-font-size: Theme.font-body;
+    width: 520px;
+    height: 640px;
+
+    in-out property <Options> opts;
+    in property <bool> default-fm;
+    in property <string> default-fm-text;
+    in-out property <int> page;
+    callback apply(Options);
+    callback restore-defaults();
+    callback toggle-default-fm();
+    callback close-requested();
+
+    Rectangle {
+        background: Theme.mica;
+        border-radius: Theme.radius-overlay;
+        border-width: 1px;
+        border-color: Theme.stroke-window;
+        clip: true;
+        VerticalLayout {
+            // Title bar
+            Rectangle {
+                height: 44px;
+                WindowMoveArea { }
+                HorizontalLayout {
+                    padding-left: 16px;
+                    spacing: 12px;
+                    Image { source: Icons.settings; width: 16px; height: 16px; y: (parent.height - 16px) / 2; colorize: Theme.text-primary; accessible-role: none; }
+                    Text { text: "Folder Options"; color: Theme.text-primary; vertical-alignment: center; horizontal-stretch: 1; }
+                    Rectangle {
+                        width: 46px;
+                        background: ct.has-hover ? #c42b1c : transparent;
+                        accessible-role: button;
+                        accessible-label: "Close";
+                        accessible-action-default => { root.close-requested(); }
+                        Image { source: Icons.dismiss; width: 16px; height: 16px; colorize: ct.has-hover ? #ffffff : Theme.text-primary; accessible-role: none; }
+                        ct := TouchArea { clicked => { root.close-requested(); } }
+                    }
+                }
+            }
+            HorizontalLayout {
+                height: 40px;
+                padding-left: 12px;
+                spacing: 4px;
+                alignment: start;
+                accessible-role: tab-list;
+                PageTab { text: "General"; selected: page == 0; clicked => { page = 0; } }
+                PageTab { text: "View"; selected: page == 1; clicked => { page = 1; } }
+                PageTab { text: "Search"; selected: page == 2; clicked => { page = 2; } }
+                PageTab { text: "Findex"; selected: page == 3; clicked => { page = 3; } }
+            }
+            Rectangle {
+                vertical-stretch: 1;
+                background: Theme.layer;
+                border-width: 1px;
+                border-color: Theme.stroke;
+                ScrollView {
+                    VerticalLayout {
+                        padding: 24px;
+                        spacing: 6px;
+                        alignment: start;
+
+                        if page == 0: VerticalLayout {
+                            spacing: 6px;
+                            SectionTitle { text: "Open Findex to"; }
+                            Radio { text: "Home"; checked: !opts.open-to-this-pc; clicked => { opts.open-to-this-pc = false; } }
+                            Radio { text: "This PC"; checked: opts.open-to-this-pc; clicked => { opts.open-to-this-pc = true; } }
+                            Rectangle { height: 10px; }
+                            SectionTitle { text: "Browse folders"; }
+                            Radio { text: "Open each folder in the same tab"; checked: !opts.folders-in-new-tab; clicked => { opts.folders-in-new-tab = false; } }
+                            Radio { text: "Open each folder in its own tab"; checked: opts.folders-in-new-tab; clicked => { opts.folders-in-new-tab = true; } }
+                            Rectangle { height: 10px; }
+                            SectionTitle { text: "Click items as follows"; }
+                            Radio { text: "Single-click to open an item (point to select)"; checked: opts.single-click; clicked => { opts.single-click = true; } }
+                            Radio { text: "Double-click to open an item (single-click to select)"; checked: !opts.single-click; clicked => { opts.single-click = false; } }
+                        }
+
+                        if page == 1: VerticalLayout {
+                            spacing: 2px;
+                            SectionTitle { text: "Files and folders"; }
+                            Check { text: "Always show icons, never thumbnails"; checked: opts.never-thumbnails; toggled => { opts.never-thumbnails = self.checked; } }
+                            Check { text: "Display the full path in the title bar"; checked: opts.full-path-title; toggled => { opts.full-path-title = self.checked; } }
+                            Check { text: "Hide empty drives"; checked: opts.hide-empty-drives; toggled => { opts.hide-empty-drives = self.checked; } }
+                            Check { text: "Hide extensions for known file types"; checked: opts.hide-extensions; toggled => { opts.hide-extensions = self.checked; } }
+                            Check { text: "Restore previous folder tabs at startup"; checked: opts.restore-tabs; toggled => { opts.restore-tabs = self.checked; } }
+                            Check { text: "Show drive letters and mount points"; checked: opts.show-mount-paths; toggled => { opts.show-mount-paths = self.checked; } }
+                            Check { text: "Show status bar"; checked: opts.show-status-bar; toggled => { opts.show-status-bar = self.checked; } }
+                            Check { text: "Use check boxes to select items"; checked: opts.check-boxes; toggled => { opts.check-boxes = self.checked; } }
+                            Rectangle { height: 10px; }
+                            SectionTitle { text: "Hidden files and folders"; }
+                            Radio { text: "Don't show hidden files, folders, or drives"; checked: !opts.show-hidden; clicked => { opts.show-hidden = false; } }
+                            Radio { text: "Show hidden files, folders, and drives"; checked: opts.show-hidden; clicked => { opts.show-hidden = true; } }
+                            Rectangle { height: 10px; }
+                            SectionTitle { text: "When typing into list view"; }
+                            Radio { text: "Automatically type into the Search Box"; checked: opts.typing-searches; clicked => { opts.typing-searches = true; } }
+                            Radio { text: "Select the typed item in the view"; checked: !opts.typing-searches; clicked => { opts.typing-searches = false; } }
+                            Rectangle { height: 10px; }
+                            SectionTitle { text: "Navigation pane"; }
+                            Check { text: "Show Home and user folders"; checked: opts.nav-places; toggled => { opts.nav-places = self.checked; } }
+                            Check { text: "Show This PC and drives"; checked: opts.nav-this-pc; toggled => { opts.nav-this-pc = self.checked; } }
+                            Check { text: "Show Network"; checked: opts.nav-network; toggled => { opts.nav-network = self.checked; } }
+                            Check { text: "Show Trash"; checked: opts.nav-trash; toggled => { opts.nav-trash = self.checked; } }
+                        }
+
+                        if page == 2: VerticalLayout {
+                            spacing: 2px;
+                            SectionTitle { text: "How to search"; }
+                            Check { text: "Search subfolders too (off: current folder only)"; checked: opts.search-subfolders; toggled => { opts.search-subfolders = self.checked; } }
+                            Check { text: "Include hidden files and folders"; checked: opts.search-hidden; toggled => { opts.search-hidden = self.checked; } }
+                            Rectangle { height: 10px; }
+                            Text {
+                                text: "Search matches file names fuzzily, ranks the best matches first and streams results while it runs. Symbolic links and system pseudo file systems are never searched.";
+                                color: Theme.text-secondary;
+                                font-size: Theme.font-caption;
+                                wrap: word-wrap;
+                            }
+                        }
+
+                        if page == 3: VerticalLayout {
+                            spacing: 6px;
+                            SectionTitle { text: "App theme"; }
+                            Radio { text: "Use system setting"; checked: opts.theme == 0; clicked => { opts.theme = 0; } }
+                            Radio { text: "Light"; checked: opts.theme == 1; clicked => { opts.theme = 1; } }
+                            Radio { text: "Dark"; checked: opts.theme == 2; clicked => { opts.theme = 2; } }
+                            Rectangle { height: 6px; }
+                            SectionTitle { text: "Appearance"; }
+                            Check { text: "Transparency effects"; checked: opts.transparency; toggled => { opts.transparency = self.checked; } }
+                            Check { text: "Compact view (decrease space between items)"; checked: opts.compact; toggled => { opts.compact = self.checked; } }
+                            Rectangle { height: 6px; }
+                            SectionTitle { text: "Default file manager"; }
+                            Text { text: default-fm-text; color: Theme.text-secondary; wrap: word-wrap; }
+                            HorizontalLayout {
+                                alignment: start;
+                                DialogButton {
+                                    text: default-fm ? "Restore previous file manager" : "Make Findex the default";
+                                    min-width: 240px;
+                                    clicked => { root.toggle-default-fm(); }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            HorizontalLayout {
+                padding: 16px;
+                spacing: 8px;
+                DialogButton { text: "Restore Defaults"; min-width: 140px; clicked => { root.restore-defaults(); } }
+                Rectangle { horizontal-stretch: 1; }
+                DialogButton { text: "OK"; primary: true; min-width: 80px; clicked => { root.apply(opts); root.close-requested(); } }
+                DialogButton { text: "Cancel"; min-width: 80px; clicked => { root.close-requested(); } }
+                DialogButton { text: "Apply"; min-width: 80px; clicked => { root.apply(opts); } }
+            }
+        }
+    }
+}

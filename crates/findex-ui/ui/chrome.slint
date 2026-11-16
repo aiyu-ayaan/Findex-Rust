@@ -270,6 +270,7 @@ export component AddressBar inherits Rectangle {
         search.focus-input();
         search.select-all();
     }
+    public function type-into-search(t: string) { search.type-text(t); }
 
     HorizontalLayout {
         padding-left: 8px;
