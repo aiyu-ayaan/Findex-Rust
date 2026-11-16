@@ -3,7 +3,6 @@ name = "findex-platform-win"
 description = "Windows implementation: FindFirstFileExW listing, logical drives, Mica backdrop, shell open."
 version.workspace = true
 edition.workspace = true
-license.workspace = true
 
 [dependencies]
 findex-core.workspace = true

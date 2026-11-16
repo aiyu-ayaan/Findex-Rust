@@ -3,7 +3,6 @@ name = "findex-app"
 description = "Findex main binary: window, tabs, navigation, search, transfers."
 version.workspace = true
 edition.workspace = true
-license.workspace = true
 
 [[bin]]
 name = "findex"
