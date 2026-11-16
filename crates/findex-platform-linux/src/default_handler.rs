@@ -45,7 +45,11 @@ pub fn is_default_file_manager() -> bool {
 pub fn set_default_file_manager(enable: bool) -> io::Result<String> {
     let backup = backup_file();
     if enable {
-        let exe = std::env::current_exe()?;
+        // Inside an AppImage the binary runs from a temporary mount; $APPIMAGE is the real file.
+        let exe = match std::env::var_os("APPIMAGE") {
+            Some(p) => PathBuf::from(p),
+            None => std::env::current_exe()?,
+        };
         let apps = dirs::data_dir()
             .ok_or_else(|| io::Error::other("no XDG data dir"))?
             .join("applications");
@@ -54,7 +58,7 @@ pub fn set_default_file_manager(enable: bool) -> io::Result<String> {
             apps.join(DESKTOP_ID),
             format!(
                 "[Desktop Entry]\nType=Application\nName=Findex\nGenericName=File Manager\nComment=Browse files and folders\n\
-                 Exec=\"{}\" %U\nIcon=system-file-manager\nTerminal=false\nCategories=System;FileTools;FileManager;\n\
+                 Exec=\"{}\" %U\nIcon=findex\nTerminal=false\nCategories=System;FileTools;FileManager;\n\
                  MimeType=inode/directory;\nStartupWMClass=findex\n",
                 exe.display()
             ),
