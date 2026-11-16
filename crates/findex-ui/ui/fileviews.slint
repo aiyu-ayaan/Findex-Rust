@@ -127,6 +127,7 @@ component Cell inherits Rectangle {
     Text {
         x: align-right ? 0px : 12px;
         width: parent.width - (align-right ? 8px : 20px);
+        height: parent.height;
         text: root.text;
         color: Theme.text-secondary;
         vertical-alignment: center;

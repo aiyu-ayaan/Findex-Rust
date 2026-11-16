@@ -95,8 +95,19 @@ export component Toast inherits Rectangle {
             height: 28px;
             y: 6px;
             border-radius: Theme.radius;
-            background: u.has-hover ? Theme.subtle-hover : transparent;
-            Text { text: "Undo"; color: Theme.accent; }
+            background: u.pressed ? Theme.subtle-pressed : u.has-hover ? Theme.subtle-hover : transparent;
+            accessible-role: button;
+            accessible-label: "Undo";
+            accessible-action-default => { root.undo(); }
+            Text {
+                width: parent.width;
+                height: parent.height;
+                text: "Undo";
+                color: Theme.accent;
+                font-size: Theme.font-body;
+                horizontal-alignment: center;
+                vertical-alignment: center;
+            }
             u := TouchArea { clicked => { root.undo(); } }
         }
     }

@@ -105,9 +105,13 @@ component PageTab inherits Rectangle {
     background: t.has-hover && !selected ? Theme.subtle-hover : transparent;
     border-radius: Theme.radius;
     label := Text {
+        height: parent.height;
         text: root.text;
         color: selected ? Theme.text-primary : Theme.text-secondary;
+        font-size: Theme.font-body;
         font-weight: selected ? 600 : 400;
+        horizontal-alignment: center;
+        vertical-alignment: center;
     }
     // Selected tab: accent pill under the label (not colour-only: weight changes too).
     Rectangle {
