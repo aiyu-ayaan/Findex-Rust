@@ -1176,7 +1176,7 @@ impl App {
         let all = self.all_drives.clone();
         self.set_drives(all);
         self.toast(
-            "Drive hidden. Show it again in Options > View.".into(),
+            "Drive hidden. Show it again in Options > Hidden drives.".into(),
             false,
         );
     }

@@ -1,4 +1,4 @@
-// Options window, modelled on Explorer's Folder Options (General / View / Search) plus a Findex page.
+// Options window, modelled on Explorer's Folder Options (General / View / Search) plus Findex and Hidden drives pages.
 // Edits are staged: OK and Apply commit them, Cancel discards them.
 import { ScrollView, CheckBox } from "std-widgets.slint";
 import { Theme } from "theme.slint";
@@ -190,6 +190,7 @@ export component OptionsWindow inherits Window {
                 PageTab { text: "View"; selected: page == 1; clicked => { page = 1; } }
                 PageTab { text: "Search"; selected: page == 2; clicked => { page = 2; } }
                 PageTab { text: "Findex"; selected: page == 3; clicked => { page = 3; } }
+                PageTab { text: "Hidden drives"; selected: page == 4; clicked => { page = 4; } }
             }
             Rectangle {
                 vertical-stretch: 1;
@@ -228,14 +229,6 @@ export component OptionsWindow inherits Window {
                             Check { text: "Show drive letters and mount points"; checked: opts.show-mount-paths; toggled => { opts.show-mount-paths = self.checked; } }
                             Check { text: "Show status bar"; checked: opts.show-status-bar; toggled => { opts.show-status-bar = self.checked; } }
                             Check { text: "Use check boxes to select items"; checked: opts.check-boxes; toggled => { opts.check-boxes = self.checked; } }
-                            Rectangle { height: 10px; }
-                            SectionTitle { text: "Hidden drives"; }
-                            if hidden-drives.length == 0: Text { text: "None. Right-click a drive in This PC and choose Hide this drive."; color: Theme.text-secondary; wrap: word-wrap; }
-                            for n[i] in hidden-drives: HorizontalLayout {
-                                spacing: 12px;
-                                Text { text: n; color: Theme.text-primary; vertical-alignment: center; overflow: elide; horizontal-stretch: 1; }
-                                DialogButton { text: "Show"; min-width: 72px; clicked => { root.unhide-drive(i); } }
-                            }
                             Rectangle { height: 10px; }
                             SectionTitle { text: "Hidden files and folders"; }
                             Radio { text: "Don't show hidden files, folders, or drives"; checked: !opts.show-hidden; clicked => { opts.show-hidden = false; } }
@@ -286,6 +279,17 @@ export component OptionsWindow inherits Window {
                                     min-width: 240px;
                                     clicked => { root.toggle-default-fm(); }
                                 }
+                            }
+                        }
+
+                        if page == 4: VerticalLayout {
+                            spacing: 6px;
+                            SectionTitle { text: "Hidden drives"; }
+                            if hidden-drives.length == 0: Text { text: "None. Right-click a drive in This PC and choose Hide this drive."; color: Theme.text-secondary; wrap: word-wrap; }
+                            for n[i] in hidden-drives: HorizontalLayout {
+                                spacing: 12px;
+                                Text { text: n; color: Theme.text-primary; vertical-alignment: center; overflow: elide; horizontal-stretch: 1; }
+                                DialogButton { text: "Show"; min-width: 72px; clicked => { root.unhide-drive(i); } }
                             }
                         }
                     }
