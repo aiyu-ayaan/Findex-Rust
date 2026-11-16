@@ -51,11 +51,10 @@ fn read_cached(path: &Path, mtime: i64) -> Option<Thumb> {
     let mut dec = png::Decoder::new(BufReader::new(File::open(path).ok()?));
     dec.set_transformations(png::Transformations::normalize_to_color8());
     let mut reader = dec.read_info().ok()?;
-    let fresh = reader
-        .info()
-        .uncompressed_latin1_text
-        .iter()
-        .any(|t| t.keyword == "Thumb::MTime" && t.text.trim().parse::<i64>().ok() == Some(mtime));
+    let fresh =
+        reader.info().uncompressed_latin1_text.iter().any(|t| {
+            t.keyword == "Thumb::MTime" && t.text.trim().parse::<i64>().ok() == Some(mtime)
+        });
     if !fresh {
         return None;
     }
@@ -64,12 +63,26 @@ fn read_cached(path: &Path, mtime: i64) -> Option<Thumb> {
     buf.truncate(info.buffer_size());
     let rgba = match info.color_type {
         png::ColorType::Rgba => buf,
-        png::ColorType::Rgb => buf.as_chunks::<3>().0.iter().flat_map(|p| [p[0], p[1], p[2], 255]).collect(),
-        png::ColorType::GrayscaleAlpha => buf.as_chunks::<2>().0.iter().flat_map(|p| [p[0], p[0], p[0], p[1]]).collect(),
+        png::ColorType::Rgb => buf
+            .as_chunks::<3>()
+            .0
+            .iter()
+            .flat_map(|p| [p[0], p[1], p[2], 255])
+            .collect(),
+        png::ColorType::GrayscaleAlpha => buf
+            .as_chunks::<2>()
+            .0
+            .iter()
+            .flat_map(|p| [p[0], p[0], p[0], p[1]])
+            .collect(),
         png::ColorType::Grayscale => buf.iter().flat_map(|&g| [g, g, g, 255]).collect(),
         png::ColorType::Indexed => return None,
     };
-    Some(Thumb { width: info.width, height: info.height, rgba })
+    Some(Thumb {
+        width: info.width,
+        height: info.height,
+        rgba,
+    })
 }
 
 fn write_cached(path: &Path, uri: &str, mtime: i64, t: &Thumb) -> std::io::Result<()> {
@@ -81,10 +94,16 @@ fn write_cached(path: &Path, uri: &str, mtime: i64, t: &Thumb) -> std::io::Resul
         let mut enc = png::Encoder::new(BufWriter::new(File::create(&tmp)?), t.width, t.height);
         enc.set_color(png::ColorType::Rgba);
         enc.set_depth(png::BitDepth::Eight);
-        enc.add_text_chunk("Thumb::URI".into(), uri.into()).map_err(std::io::Error::other)?;
-        enc.add_text_chunk("Thumb::MTime".into(), mtime.to_string()).map_err(std::io::Error::other)?;
-        enc.add_text_chunk("Software".into(), "Findex".into()).map_err(std::io::Error::other)?;
-        enc.write_header().map_err(std::io::Error::other)?.write_image_data(&t.rgba).map_err(std::io::Error::other)?;
+        enc.add_text_chunk("Thumb::URI".into(), uri.into())
+            .map_err(std::io::Error::other)?;
+        enc.add_text_chunk("Thumb::MTime".into(), mtime.to_string())
+            .map_err(std::io::Error::other)?;
+        enc.add_text_chunk("Software".into(), "Findex".into())
+            .map_err(std::io::Error::other)?;
+        enc.write_header()
+            .map_err(std::io::Error::other)?
+            .write_image_data(&t.rgba)
+            .map_err(std::io::Error::other)?;
     }
     std::fs::rename(&tmp, path)
 }
@@ -93,14 +112,21 @@ fn decode(path: &Path) -> Option<Thumb> {
     if std::fs::metadata(path).ok()?.len() > MAX_FILE_BYTES {
         return None;
     }
-    let mut reader = image::ImageReader::open(path).ok()?.with_guessed_format().ok()?;
+    let mut reader = image::ImageReader::open(path)
+        .ok()?
+        .with_guessed_format()
+        .ok()?;
     let mut limits = image::Limits::default();
     limits.max_alloc = Some(512 << 20);
     limits.max_image_width = Some(20_000);
     limits.max_image_height = Some(20_000);
     reader.limits(limits);
     let img = reader.decode().ok()?.thumbnail(SIZE, SIZE).to_rgba8();
-    Some(Thumb { width: img.width(), height: img.height(), rgba: img.into_raw() })
+    Some(Thumb {
+        width: img.width(),
+        height: img.height(),
+        rgba: img.into_raw(),
+    })
 }
 
 /// Cached thumbnail, or a freshly made one (then cached). `None` for unsupported or broken files.
@@ -117,8 +143,14 @@ pub fn thumbnail(path: &Path, mtime: i64, cache_dir: &Path) -> Option<Thumb> {
 
 /// True for extensions this crate can decode.
 pub fn supported(name: &str) -> bool {
-    let ext = name.rsplit_once('.').map(|(_, e)| e.to_ascii_lowercase()).unwrap_or_default();
-    matches!(ext.as_str(), "png" | "jpg" | "jpeg" | "gif" | "webp" | "bmp" | "ico" | "tif" | "tiff")
+    let ext = name
+        .rsplit_once('.')
+        .map(|(_, e)| e.to_ascii_lowercase())
+        .unwrap_or_default();
+    matches!(
+        ext.as_str(),
+        "png" | "jpg" | "jpeg" | "gif" | "webp" | "bmp" | "ico" | "tif" | "tiff"
+    )
 }
 
 struct Request {
@@ -143,29 +175,36 @@ struct Shared {
 pub struct Service(Arc<Shared>);
 
 impl Service {
-    pub fn new(workers: usize, cache_dir: PathBuf, on_ready: impl Fn(u64, u64, Thumb) + Send + Sync + 'static) -> Service {
+    pub fn new(
+        workers: usize,
+        cache_dir: PathBuf,
+        on_ready: impl Fn(u64, u64, Thumb) + Send + Sync + 'static,
+    ) -> Service {
         let shared = Arc::new(Shared::default());
         let on_ready = Arc::new(on_ready);
         for i in 0..workers.max(1) {
-            let (shared, on_ready, cache_dir) = (shared.clone(), on_ready.clone(), cache_dir.clone());
+            let (shared, on_ready, cache_dir) =
+                (shared.clone(), on_ready.clone(), cache_dir.clone());
             std::thread::Builder::new()
                 .name(format!("findex-thumb-{i}"))
-                .spawn(move || loop {
-                    let req = {
-                        let mut q = shared.queue.lock().unwrap();
-                        loop {
-                            if let Some(r) = q.0.pop() {
-                                q.1.remove(&(r.generation, r.key));
-                                break r;
+                .spawn(move || {
+                    loop {
+                        let req = {
+                            let mut q = shared.queue.lock().unwrap();
+                            loop {
+                                if let Some(r) = q.0.pop() {
+                                    q.1.remove(&(r.generation, r.key));
+                                    break r;
+                                }
+                                q = shared.wake.wait(q).unwrap();
                             }
-                            q = shared.wake.wait(q).unwrap();
+                        };
+                        if req.generation != shared.generation.load(Relaxed) {
+                            continue; // the user navigated away
                         }
-                    };
-                    if req.generation != shared.generation.load(Relaxed) {
-                        continue; // the user navigated away
-                    }
-                    if let Some(t) = thumbnail(&req.path, req.mtime, &cache_dir) {
-                        on_ready(req.generation, req.key, t);
+                        if let Some(t) = thumbnail(&req.path, req.mtime, &cache_dir) {
+                            on_ready(req.generation, req.key, t);
+                        }
                     }
                 })
                 .expect("spawn thumbnail worker");
@@ -185,7 +224,12 @@ impl Service {
     pub fn request(&self, generation: u64, key: u64, path: PathBuf, mtime: i64) {
         let mut q = self.0.queue.lock().unwrap();
         if q.1.insert((generation, key)) {
-            q.0.push(Request { generation, key, path, mtime });
+            q.0.push(Request {
+                generation,
+                key,
+                path,
+                mtime,
+            });
             self.0.wake.notify_one();
         }
     }
@@ -197,14 +241,19 @@ mod tests {
 
     #[test]
     fn uri_escaping_matches_glib() {
-        assert_eq!(file_uri(Path::new("/home/a b/ü.png")), "file:///home/a%20b/%C3%BC.png");
+        assert_eq!(
+            file_uri(Path::new("/home/a b/ü.png")),
+            "file:///home/a%20b/%C3%BC.png"
+        );
     }
 
     #[test]
     fn makes_and_reuses_cached_thumbnail() {
         let t = tempfile::tempdir().unwrap();
         let img = t.path().join("p.png");
-        image::RgbaImage::from_pixel(400, 200, image::Rgba([10, 20, 30, 255])).save(&img).unwrap();
+        image::RgbaImage::from_pixel(400, 200, image::Rgba([10, 20, 30, 255]))
+            .save(&img)
+            .unwrap();
         let cache = t.path().join("cache");
         let a = thumbnail(&img, 42, &cache).unwrap();
         assert_eq!((a.width, a.height), (128, 64));

@@ -50,7 +50,10 @@ impl Job {
         self.status.lock().unwrap().clone()
     }
     pub fn is_finished(&self) -> bool {
-        matches!(self.status(), Status::Done | Status::Cancelled | Status::Failed(_))
+        matches!(
+            self.status(),
+            Status::Done | Status::Cancelled | Status::Failed(_)
+        )
     }
     fn set_status(&self, s: Status) {
         *self.status.lock().unwrap() = s;
@@ -93,7 +96,11 @@ impl Queue {
                 }
             })
             .expect("spawn ops worker");
-        Queue { tx, jobs: Default::default(), next_id: AtomicU64::new(1) }
+        Queue {
+            tx,
+            jobs: Default::default(),
+            next_id: AtomicU64::new(1),
+        }
     }
 
     pub fn submit(&self, kind: JobKind, sources: Vec<PathBuf>, dest: Option<PathBuf>) -> Arc<Job> {
@@ -128,11 +135,17 @@ impl Queue {
 fn run(job: &Job) -> io::Result<()> {
     match job.kind {
         JobKind::Copy | JobKind::Move => {
-            let dest = job.dest.as_deref().ok_or_else(|| io::Error::other("no destination"))?;
+            let dest = job
+                .dest
+                .as_deref()
+                .ok_or_else(|| io::Error::other("no destination"))?;
             let mut plan = Vec::new();
             for s in &job.sources {
                 if dest.starts_with(s) && s.is_dir() {
-                    return Err(io::Error::other(format!("Cannot put {} inside itself", s.display())));
+                    return Err(io::Error::other(format!(
+                        "Cannot put {} inside itself",
+                        s.display()
+                    )));
                 }
                 if job.kind == JobKind::Move && s.parent() == Some(dest) {
                     continue; // moving into the folder it is already in
@@ -195,7 +208,9 @@ fn run(job: &Job) -> io::Result<()> {
 
 /// (bytes, items) under `p`. Never follows symlinks.
 fn measure(p: &Path) -> (u64, u64) {
-    let Ok(m) = std::fs::symlink_metadata(p) else { return (0, 0) };
+    let Ok(m) = std::fs::symlink_metadata(p) else {
+        return (0, 0);
+    };
     let (mut bytes, mut items) = (if m.is_file() { m.len() } else { 0 }, 1);
     if m.is_dir() {
         for e in std::fs::read_dir(p).into_iter().flatten().flatten() {
@@ -234,13 +249,21 @@ fn copy_tree(src: &Path, dst: &Path, job: &Job) -> io::Result<()> {
 
 /// Removes a file or a whole tree without following symlinks (`remove_dir_all` does not traverse them).
 fn remove(p: &Path) -> io::Result<()> {
-    if std::fs::symlink_metadata(p)?.is_dir() { std::fs::remove_dir_all(p) } else { std::fs::remove_file(p) }
+    if std::fs::symlink_metadata(p)?.is_dir() {
+        std::fs::remove_dir_all(p)
+    } else {
+        std::fs::remove_file(p)
+    }
 }
 
 /// Destination for `src` inside `dir`. On a name clash keeps both, Explorer style:
 /// "a.txt" -> "a - Copy.txt" -> "a - Copy (2).txt". Never overwrites.
 pub fn unique_target(dir: &Path, src: &Path) -> PathBuf {
-    let name = src.file_name().unwrap_or_default().to_string_lossy().into_owned();
+    let name = src
+        .file_name()
+        .unwrap_or_default()
+        .to_string_lossy()
+        .into_owned();
     let first = dir.join(&name);
     if std::fs::symlink_metadata(&first).is_err() {
         return first;
@@ -251,7 +274,13 @@ pub fn unique_target(dir: &Path, src: &Path) -> PathBuf {
         _ => (name.clone(), String::new()),
     };
     (1..)
-        .map(|i| if i == 1 { dir.join(format!("{stem} - Copy{ext}")) } else { dir.join(format!("{stem} - Copy ({i}){ext}")) })
+        .map(|i| {
+            if i == 1 {
+                dir.join(format!("{stem} - Copy{ext}"))
+            } else {
+                dir.join(format!("{stem} - Copy ({i}){ext}"))
+            }
+        })
         .find(|p| std::fs::symlink_metadata(p).is_err())
         .unwrap()
 }
@@ -276,19 +305,34 @@ mod tests {
         let q = Queue::new(|_| {});
 
         // copy a folder into its own parent: becomes "src - Copy"
-        let j = q.submit(JobKind::Copy, vec![src.clone()], Some(t.path().to_path_buf()));
+        let j = q.submit(
+            JobKind::Copy,
+            vec![src.clone()],
+            Some(t.path().to_path_buf()),
+        );
         wait(&j);
         assert_eq!(j.status(), Status::Done);
-        assert_eq!(std::fs::read(t.path().join("src - Copy/inner/f.txt")).unwrap(), b"hello");
+        assert_eq!(
+            std::fs::read(t.path().join("src - Copy/inner/f.txt")).unwrap(),
+            b"hello"
+        );
         assert_eq!(j.done_bytes.load(Relaxed), 5);
 
-        let j = q.submit(JobKind::Copy, vec![t.path().join("a.txt")], Some(t.path().to_path_buf()));
+        let j = q.submit(
+            JobKind::Copy,
+            vec![t.path().join("a.txt")],
+            Some(t.path().to_path_buf()),
+        );
         wait(&j);
         assert!(t.path().join("a - Copy.txt").exists());
 
         let dst = t.path().join("dst");
         std::fs::create_dir(&dst).unwrap();
-        let j = q.submit(JobKind::Move, vec![t.path().join("a.txt")], Some(dst.clone()));
+        let j = q.submit(
+            JobKind::Move,
+            vec![t.path().join("a.txt")],
+            Some(dst.clone()),
+        );
         wait(&j);
         assert!(dst.join("a.txt").exists() && !t.path().join("a.txt").exists());
 

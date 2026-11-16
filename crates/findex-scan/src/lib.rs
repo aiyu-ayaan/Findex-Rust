@@ -28,13 +28,24 @@ pub struct Options {
 
 impl Default for Options {
     fn default() -> Self {
-        Options { include_hidden: false, max_results: 20_000 }
+        Options {
+            include_hidden: false,
+            max_results: 20_000,
+        }
     }
 }
 
 /// Searches `root` and its subfolders for names fuzzy-matching `query`. Blocks until done or cancelled.
-pub fn search(root: &Path, query: &str, opts: &Options, cancel: &Cancel, sink: &mut dyn FnMut(Vec<Hit>)) {
-    let threads = std::thread::available_parallelism().map_or(4, |n| n.get()).min(8);
+pub fn search(
+    root: &Path,
+    query: &str,
+    opts: &Options,
+    cancel: &Cancel,
+    sink: &mut dyn FnMut(Vec<Hit>),
+) {
+    let threads = std::thread::available_parallelism()
+        .map_or(4, |n| n.get())
+        .min(8);
     let found = AtomicUsize::new(0);
     let mut level = vec![root.to_path_buf()];
     while !level.is_empty() && !cancel.is_cancelled() {
@@ -49,7 +60,10 @@ pub fn search(root: &Path, query: &str, opts: &Options, cancel: &Cancel, sink: &
                     let mut fuzzy = Fuzzy::new(query);
                     loop {
                         let i = cursor.fetch_add(1, Relaxed);
-                        if i >= level.len() || cancel.is_cancelled() || found.load(Relaxed) >= opts.max_results {
+                        if i >= level.len()
+                            || cancel.is_cancelled()
+                            || found.load(Relaxed) >= opts.max_results
+                        {
                             break;
                         }
                         let dir = &level[i];
@@ -95,9 +109,13 @@ pub fn search(root: &Path, query: &str, opts: &Options, cancel: &Cancel, sink: &
 /// Convenience for tests and the CLI: collect every hit.
 pub fn search_all(root: &Path, query: &str) -> Vec<PathBuf> {
     let mut out = Vec::new();
-    search(root, query, &Options::default(), &Cancel::default(), &mut |hits| {
-        out.extend(hits.into_iter().map(|h| h.entry.path_in(root)))
-    });
+    search(
+        root,
+        query,
+        &Options::default(),
+        &Cancel::default(),
+        &mut |hits| out.extend(hits.into_iter().map(|h| h.entry.path_in(root))),
+    );
     out
 }
 
