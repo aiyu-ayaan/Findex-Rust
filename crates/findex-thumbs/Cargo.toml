@@ -2,6 +2,7 @@
 name = "findex-thumbs"
 description = "Thumbnail generation with the shared freedesktop cache and a visible-first scheduler."
 version.workspace = true
+license.workspace = true
 edition.workspace = true
 
 [dependencies]

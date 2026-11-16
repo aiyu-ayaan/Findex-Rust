@@ -2,6 +2,7 @@
 name = "findex-core"
 description = "Findex models, sorting, history and fuzzy matching. No UI, no OS calls."
 version.workspace = true
+license.workspace = true
 edition.workspace = true
 
 [dependencies]

@@ -2,6 +2,7 @@
 name = "findex-ui"
 description = "Slint UI: Windows 11 style window, views, theme tokens and icons."
 version.workspace = true
+license.workspace = true
 edition.workspace = true
 
 [dependencies]

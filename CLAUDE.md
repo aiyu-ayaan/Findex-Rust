@@ -75,6 +75,6 @@ Cold start < 150 ms. 100k-entry folder first rows < 80 ms, complete < 600 ms. 60
 ## Open questions
 
 1. Does "copy and paste same panel" mean one unified transfer panel?
-2. Project licence (drives the Slint decision). No licence is declared yet; the Android Findex app is Apache-2.0.
+2. Project licence: Apache-2.0 (chosen). Open: confirm the Slint licence option that is compatible with it (S7).
 3. Minimum Windows (10 22H2?) and Linux (glibc 2.31?) versions.
 4. Per-user installer default on Windows.

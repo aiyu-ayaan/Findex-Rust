@@ -13,7 +13,7 @@ Legend: `[ ]` open, `[x]` done. P0 = v1.0 blocker, P1 = v1.0 target, P2 = later.
 ## Decisions needed from the owner
 
 - [ ] Confirm "copy and paste same panel" means one unified transfer panel
-- [ ] Choose project licence (affects Slint, see S7)
+- [x] Choose project licence: Apache-2.0 (`LICENSE`). Still check Slint terms, see S7
 - [ ] Confirm minimum Windows and Linux versions
 - [ ] Confirm per-user installer as default on Windows
 
@@ -21,8 +21,9 @@ Legend: `[ ]` open, `[x]` done. P0 = v1.0 blocker, P1 = v1.0 target, P2 = later.
 
 - [ ] S1 toolkit spike (1M-row list, icon grid, tab strip, tear-off, file drop)
 - [ ] S4 copy engine measurements
-- [ ] S7 licence decision, write ADR-001-final
+- [ ] S7 Slint licence check against Apache-2.0 (Slint is GPLv3 / royalty-free / commercial), write ADR-001-final
 - [x] Cargo workspace and crate skeletons
+- [x] `run.sh` to build and run the app (`./run.sh [--release] [path]`)
 - [x] CI for Linux and Windows (fmt, clippy, test; `cargo deny` not yet)
 - [ ] Benchmark harness and fixture generator (fixture generator done: `development/scripts/make_fixture.py --big N`)
 - [ ] `theme` tokens file (light/dark) and contrast check script (tokens done: `crates/findex-ui/ui/theme.slint`; script open)

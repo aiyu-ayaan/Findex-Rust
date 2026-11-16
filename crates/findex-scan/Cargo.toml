@@ -2,6 +2,7 @@
 name = "findex-scan"
 description = "Recursive walkers: parallel streaming fuzzy search."
 version.workspace = true
+license.workspace = true
 edition.workspace = true
 
 [dependencies]

@@ -137,3 +137,7 @@ cargo build --release -p findex-app && scripts/package-linux.sh   # AppImage + .
 ## 🏷️ Releases
 
 Same flow as Domus: put `!alpha`, `!beta`, `!stable`, `!fix`, `!feat` or `!major` at the start of a commit subject on `master`. That opens a release PR, and merging the PR builds and publishes. Details: [`development/docs/09-release.md`](development/docs/09-release.md).
+
+## Licence
+
+Apache License 2.0. See [LICENSE](LICENSE).

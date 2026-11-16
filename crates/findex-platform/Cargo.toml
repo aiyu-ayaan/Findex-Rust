@@ -2,6 +2,7 @@
 name = "findex-platform"
 description = "Platform facade: re-exports the Linux or Windows implementation. The only place that selects by target OS."
 version.workspace = true
+license.workspace = true
 edition.workspace = true
 
 [dependencies]

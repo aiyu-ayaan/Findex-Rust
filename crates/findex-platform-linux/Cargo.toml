@@ -2,6 +2,7 @@
 name = "findex-platform-linux"
 description = "Linux implementation: getdents64 listing, mountinfo/udisks drives, reflink copy, xdg default handler."
 version.workspace = true
+license.workspace = true
 edition.workspace = true
 
 [target.'cfg(target_os = "linux")'.dependencies]

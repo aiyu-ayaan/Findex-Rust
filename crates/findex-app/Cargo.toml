@@ -2,6 +2,7 @@
 name = "findex-app"
 description = "Findex main binary: window, tabs, navigation, search, transfers."
 version.workspace = true
+license.workspace = true
 edition.workspace = true
 
 [[bin]]
