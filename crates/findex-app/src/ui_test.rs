@@ -8,6 +8,7 @@
 //!   wait MS | key [ctrl+][shift+][alt+]NAME | type TEXT | click X Y | rclick X Y | dblclick X Y
 //!   resize W H | snap NAME | quit
 //!   tclick X Y | tsnap NAME   (same, in the transfer window)
+//!   oclick X Y | osnap NAME   (same, in the options window)
 //!   expect FIELD TEXT   (polls up to 4 s) where FIELD is status, selection, title, path, toast, view,
 //!   tabs, rows, rows>=, crumbs, error, details
 //!   wait-jobs           (until no transfer is running)
@@ -146,6 +147,25 @@ fn field(ui: &AppWindow, name: &str) -> String {
         "details" => ui.get_details().name.into(),
         "jobs" => ui.get_active_jobs().to_string(),
         "transfer-window" => transfer().window().is_visible().to_string(),
+        "options-window" => options().window().is_visible().to_string(),
+        "statusbar" => ui.get_status_bar().to_string(),
+        "checkboxes" => ui.get_check_boxes().to_string(),
+        "dark" => ui.global::<findex_ui::Theme>().get_dark().to_string(),
+        "transparency" => ui
+            .global::<findex_ui::Theme>()
+            .get_transparency()
+            .to_string(),
+        "name" | "name=" => ui
+            .get_rows()
+            .row_data(ui.get_focus_row().max(0) as usize)
+            .map(|r| r.name.to_string())
+            .unwrap_or_default(),
+        "nav" => ui
+            .get_nav_items()
+            .iter()
+            .map(|n| n.label.to_string())
+            .collect::<Vec<_>>()
+            .join("|"),
         "job" => ui
             .get_jobs()
             .row_data(0)
@@ -161,10 +181,17 @@ fn transfer() -> findex_ui::TransferWindow {
     w.expect("app running")
 }
 
+fn options() -> findex_ui::OptionsWindow {
+    let mut w = None;
+    crate::app::with_app(|a| w = Some(a.options_window().clone_strong()));
+    w.expect("app running")
+}
+
 fn check(field_name: &str, actual: &str, want: &str) -> bool {
     match field_name {
         "rows>=" => actual.parse::<usize>().unwrap_or(0) >= want.parse().unwrap_or(usize::MAX),
-        "tabs" | "rows" | "view" | "jobs" | "transfer-window" => actual == want,
+        "tabs" | "rows" | "view" | "jobs" | "transfer-window" | "options-window" | "statusbar"
+        | "checkboxes" | "dark" | "transparency" | "name=" => actual == want,
         _ => actual.contains(want),
     }
 }
@@ -232,12 +259,23 @@ fn step(mut r: Runner) {
                 false,
             )
         }
-        "snap" | "tsnap" => {
-            let tw = transfer();
-            let window = if cmd == "tsnap" {
-                tw.window()
-            } else {
-                ui.window()
+        "oclick" => {
+            let ow = options();
+            click(
+                ow.window(),
+                nums[0],
+                nums[1],
+                rest,
+                PointerEventButton::Left,
+                false,
+            )
+        }
+        "snap" | "tsnap" | "osnap" => {
+            let (tw, ow) = (transfer(), options());
+            let window = match cmd {
+                "tsnap" => tw.window(),
+                "osnap" => ow.window(),
+                _ => ui.window(),
             };
             match window.take_snapshot() {
                 Ok(buf) => {

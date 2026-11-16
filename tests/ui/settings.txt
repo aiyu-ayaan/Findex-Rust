@@ -1,0 +1,91 @@
+# Folder Options window: pages render; each option changes behaviour; Cancel discards; OK commits; defaults restore.
+# Options window layout (520x640): tabs y=65 (General 51, View 121, Search 189, Findex 263);
+# footer y=608 (Restore 86, OK 288, Cancel 375, Apply 464); option rows at x=34.
+resize 1280 800
+expect rows 17
+click 571 113
+wait 250
+click 386 280
+expect options-window true
+wait 300
+osnap 70-options-general
+# --- View page: hide extensions, full path title, check boxes, show hidden -> Apply
+oclick 121 65
+wait 200
+osnap 71-options-view
+oclick 34 231
+oclick 34 171
+oclick 34 351
+oclick 34 441
+oclick 464 608
+expect rows 18
+expect checkboxes true
+expect title .cache/findex-ui-fixture
+key Home
+type fore
+expect name= forest
+expect details forest.png
+# the newly shown hidden file sorts into place (".hidden_config" first after folders)
+key Home
+key Down
+key Down
+key Down
+key Down
+expect name= .hidden_config
+wait 300
+snap 74-options-applied
+# --- Cancel discards: turn the status bar off, then cancel
+oclick 34 321
+oclick 375 608
+expect options-window false
+expect statusbar true
+# --- OK commits: single-click opening + typing goes to the search box
+click 571 113
+wait 250
+click 386 280
+expect options-window true
+oclick 34 358
+oclick 121 65
+wait 200
+oclick 34 503
+oclick 288 608
+expect options-window false
+click 400 187
+expect title Alpha
+key alt+Left
+expect title findex-ui-fixture
+wait 1100
+type nee
+expect title Search: nee
+expect rows 1
+key Escape
+key Escape
+expect title findex-ui-fixture
+# --- Findex page: light theme, transparency off, dark theme
+click 571 113
+wait 250
+click 386 280
+oclick 263 65
+wait 200
+osnap 73-options-findex
+oclick 34 179
+oclick 34 282
+oclick 464 608
+expect dark false
+expect transparency false
+wait 300
+snap 75-light-opaque
+osnap 76-options-light
+oclick 34 213
+oclick 34 282
+oclick 464 608
+expect dark true
+expect transparency true
+# --- Restore Defaults puts everything back (theme stays as chosen)
+oclick 86 608
+oclick 288 608
+expect rows 17
+expect checkboxes false
+key Home
+type fore
+expect name= forest.png

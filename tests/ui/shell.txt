@@ -1,0 +1,82 @@
+# Fuzzy search, tabs, This PC, context menu, command bar menus, responsive layout.
+resize 1280 800
+expect rows 17
+# --- fuzzy recursive search: "ndl hay" finds Gamma/Deep/Deeper/needle_in_haystack.txt
+key ctrl+f
+type ndlhay
+expect title Search: ndlhay
+expect rows 1
+expect status 1 item
+key Down
+expect details needle_in_haystack.txt
+snap 50-search
+key Return
+expect rows>= 1
+key Escape
+key Escape
+expect title findex-ui-fixture
+expect rows 17
+# search ranks prefix matches first
+key ctrl+f
+type rep
+expect rows>= 2
+key Escape
+key Escape
+# --- tabs
+key ctrl+t
+expect tabs 2
+expect title Home
+key ctrl+Tab
+expect title findex-ui-fixture
+key ctrl+shift+Tab
+expect title Home
+snap 51-two-tabs
+key ctrl+w
+expect tabs 1
+expect title findex-ui-fixture
+# --- This PC
+key ctrl+l
+key ctrl+a
+type This PC
+key Return
+expect title This PC
+wait 400
+snap 52-this-pc
+key alt+Left
+expect title findex-ui-fixture
+# --- context menus
+rclick 400 251
+wait 300
+snap 53-context-item
+key Escape
+rclick 700 760
+wait 300
+snap 54-context-background
+key Escape
+# --- command bar flyouts
+click 414 113
+wait 300
+snap 55-view-menu
+key Escape
+click 337 113
+wait 300
+snap 56-sort-menu
+key Escape
+click 571 113
+wait 300
+snap 57-more-menu
+key Escape
+# --- details pane and responsive widths
+click 506 113
+key Home
+type forest
+wait 500
+snap 58-details-pane
+click 506 113
+resize 860 600
+wait 300
+snap 59-narrow
+resize 660 480
+wait 300
+snap 60-very-narrow
+resize 1280 800
