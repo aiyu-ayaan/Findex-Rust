@@ -1,0 +1,23 @@
+[package]
+name = "findex-app"
+description = "Findex main binary: window, tabs, navigation, search, transfers."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "findex"
+path = "src/main.rs"
+
+[dependencies]
+findex-core.workspace = true
+findex-platform.workspace = true
+findex-ops.workspace = true
+findex-scan.workspace = true
+findex-thumbs.workspace = true
+findex-ui.workspace = true
+slint = { workspace = true, features = ["std", "raw-window-handle-06"] }
+raw-window-handle.workspace = true
+dirs.workspace = true
+trash.workspace = true
+image.workspace = true
