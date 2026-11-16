@@ -1,0 +1,88 @@
+// Fluent System Icons (MIT, see icons/LICENSE). One family, regular weight.
+export global Icons {
+    out property <image> add: @image-url("icons/add.svg");
+    out property <image> archive: @image-url("icons/archive.svg");
+    out property <image> back: @image-url("icons/back.svg");
+    out property <image> check: @image-url("icons/check.svg");
+    out property <image> chevron-down: @image-url("icons/chevron-down.svg");
+    out property <image> chevron-right: @image-url("icons/chevron-right.svg");
+    out property <image> cleanup: @image-url("icons/cleanup.svg");
+    out property <image> code: @image-url("icons/code.svg");
+    out property <image> copy: @image-url("icons/copy.svg");
+    out property <image> cut: @image-url("icons/cut.svg");
+    out property <image> delete: @image-url("icons/delete.svg");
+    out property <image> desktop: @image-url("icons/desktop.svg");
+    out property <image> details-pane: @image-url("icons/details-pane.svg");
+    out property <image> dismiss: @image-url("icons/dismiss.svg");
+    out property <image> documents: @image-url("icons/documents.svg");
+    out property <image> document: @image-url("icons/document.svg");
+    out property <image> downloads: @image-url("icons/downloads.svg");
+    out property <image> drive: @image-url("icons/drive.svg");
+    out property <image> eject: @image-url("icons/eject.svg");
+    out property <image> folder-filled: @image-url("icons/folder-filled.svg");
+    out property <image> folder: @image-url("icons/folder.svg");
+    out property <image> forward: @image-url("icons/forward.svg");
+    out property <image> grid: @image-url("icons/grid.svg");
+    out property <image> home: @image-url("icons/home.svg");
+    out property <image> image: @image-url("icons/image.svg");
+    out property <image> info: @image-url("icons/info.svg");
+    out property <image> maximize: @image-url("icons/maximize.svg");
+    out property <image> minimize: @image-url("icons/minimize.svg");
+    out property <image> more: @image-url("icons/more.svg");
+    out property <image> music: @image-url("icons/music.svg");
+    out property <image> network: @image-url("icons/network.svg");
+    out property <image> new-file: @image-url("icons/new-file.svg");
+    out property <image> new-folder: @image-url("icons/new-folder.svg");
+    out property <image> open: @image-url("icons/open.svg");
+    out property <image> paste: @image-url("icons/paste.svg");
+    out property <image> pause: @image-url("icons/pause.svg");
+    out property <image> pc: @image-url("icons/pc.svg");
+    out property <image> play: @image-url("icons/play.svg");
+    out property <image> refresh: @image-url("icons/refresh.svg");
+    out property <image> rename: @image-url("icons/rename.svg");
+    out property <image> restore: @image-url("icons/restore.svg");
+    out property <image> search: @image-url("icons/search.svg");
+    out property <image> settings: @image-url("icons/settings.svg");
+    out property <image> share: @image-url("icons/share.svg");
+    out property <image> sort: @image-url("icons/sort.svg");
+    out property <image> theme: @image-url("icons/theme.svg");
+    out property <image> transfer: @image-url("icons/transfer.svg");
+    out property <image> undo: @image-url("icons/undo.svg");
+    out property <image> up: @image-url("icons/up.svg");
+    out property <image> usb: @image-url("icons/usb.svg");
+    out property <image> video: @image-url("icons/video.svg");
+    out property <image> view-content: @image-url("icons/view-content.svg");
+    out property <image> view-details: @image-url("icons/view-details.svg");
+    out property <image> view-list: @image-url("icons/view-list.svg");
+    out property <image> view-tiles: @image-url("icons/view-tiles.svg");
+
+    /// Glyph for a file kind (findex_core::Kind).
+    public pure function for-kind(kind: int) -> image {
+        if kind == 0 { return folder-filled; }
+        if kind == 2 { return image; }
+        if kind == 3 { return video; }
+        if kind == 4 { return music; }
+        if kind == 7 { return archive; }
+        if kind == 8 { return code; }
+        if kind == 9 { return open; }
+        return document;
+    }
+
+    /// Glyph for a navigation pane / This PC key.
+    public pure function for-key(key: string) -> image {
+        if key == "home" { return home; }
+        if key == "desktop" { return desktop; }
+        if key == "downloads" { return downloads; }
+        if key == "documents" { return documents; }
+        if key == "image" { return image; }
+        if key == "music" { return music; }
+        if key == "video" { return video; }
+        if key == "pc" { return pc; }
+        if key == "drive" { return drive; }
+        if key == "usb" { return usb; }
+        if key == "network" { return network; }
+        if key == "trash" { return delete; }
+        if key == "optical" { return drive; }
+        return folder-filled;
+    }
+}

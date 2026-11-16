@@ -1,0 +1,276 @@
+// Navigation pane, details pane, status bar and the This PC page.
+import { ScrollView } from "std-widgets.slint";
+import { Theme } from "theme.slint";
+import { Icons } from "icons.slint";
+import { IconButton, ThinProgress, HDivider } from "controls.slint";
+import { FileIcon } from "fileviews.slint";
+import { NavItem, DriveData, Details } from "types.slint";
+
+component NavRow inherits Rectangle {
+    in property <NavItem> item;
+    callback clicked;
+    height: item.kind == 2 ? 28px : 32px;
+    accessible-role: button;
+    accessible-label: item.label;
+    accessible-item-selected: item.current;
+    accessible-action-default => { clicked(); }
+
+    if item.kind != 2: Rectangle {
+        x: 4px;
+        width: parent.width - 8px;
+        border-radius: Theme.radius;
+        background: item.current ? Theme.selection : touch.has-hover ? Theme.subtle-hover : transparent;
+        animate background { duration: Theme.fast; }
+    }
+    // Current location: accent bar as well as fill, so it is not colour-only.
+    if item.current: Rectangle {
+        x: 4px;
+        width: 3px;
+        height: 16px;
+        border-radius: 1.5px;
+        background: Theme.accent;
+    }
+    if item.kind == 2: HDivider {
+        x: 12px;
+        width: parent.width - 24px;
+    }
+    if item.kind != 2: HorizontalLayout {
+        padding-left: item.kind == 1 ? 32px : 16px;
+        padding-right: 8px;
+        spacing: 12px;
+        Image {
+            source: Icons.for-key(item.icon);
+            width: 16px;
+            height: 16px;
+            y: (parent.height - 16px) / 2;
+            colorize: item.icon == "folder" ? Theme.kind-color(0) : Theme.text-primary;
+            accessible-role: none;
+        }
+        Text {
+            text: item.label;
+            color: Theme.text-primary;
+            vertical-alignment: center;
+            overflow: elide;
+        }
+    }
+    touch := TouchArea {
+        enabled: item.kind != 2;
+        clicked => { root.clicked(); }
+    }
+}
+
+export component NavPane inherits Rectangle {
+    in property <[NavItem]> items;
+    callback activate(int);
+    accessible-role: list;
+    accessible-label: "Navigation pane";
+    ScrollView {
+        VerticalLayout {
+            padding-top: 4px;
+            padding-bottom: 8px;
+            alignment: start;
+            for item[i] in items: NavRow {
+                item: item;
+                clicked => { root.activate(i); }
+            }
+        }
+    }
+}
+
+export component StatusBar inherits Rectangle {
+    in property <string> left-text;
+    in property <string> selection-text;
+    in property <int> active-jobs;
+    in property <float> jobs-progress;
+    in property <int> view-mode;
+    callback open-transfers();
+    callback set-view(int);
+    height: Theme.status-height;
+    HorizontalLayout {
+        padding-left: 16px;
+        padding-right: 8px;
+        spacing: 16px;
+        Text {
+            text: left-text;
+            color: Theme.text-secondary;
+            font-size: Theme.font-caption;
+            vertical-alignment: center;
+            accessible-role: AccessibleRole.text;
+        }
+        if selection-text != "": Rectangle { width: 1px; height: 14px; y: (parent.height - 14px) / 2; background: Theme.stroke-strong; }
+        Text {
+            text: selection-text;
+            color: Theme.text-secondary;
+            font-size: Theme.font-caption;
+            vertical-alignment: center;
+        }
+        Rectangle { horizontal-stretch: 1; }
+        if active-jobs > 0: Rectangle {
+            width: 168px;
+            border-radius: Theme.radius;
+            background: t.has-hover ? Theme.subtle-hover : transparent;
+            accessible-role: button;
+            accessible-label: active-jobs + " transfers in progress";
+            accessible-action-default => { root.open-transfers(); }
+            HorizontalLayout {
+                padding-left: 8px;
+                padding-right: 8px;
+                spacing: 8px;
+                Image { source: Icons.transfer; width: 14px; height: 14px; y: (parent.height - 14px) / 2; colorize: Theme.accent; accessible-role: none; }
+                ThinProgress { y: (parent.height - 4px) / 2; value: jobs-progress; horizontal-stretch: 1; }
+            }
+            t := TouchArea { clicked => { root.open-transfers(); } }
+        }
+        IconButton {
+            width: 28px;
+            height: 24px;
+            y: (parent.height - 24px) / 2;
+            icon: Icons.view-details;
+            label: "Details view";
+            checked: view-mode == 5;
+            clicked => { root.set-view(5); }
+        }
+        IconButton {
+            width: 28px;
+            height: 24px;
+            y: (parent.height - 24px) / 2;
+            icon: Icons.grid;
+            label: "Large icons view";
+            checked: view-mode == 1;
+            clicked => { root.set-view(1); }
+        }
+    }
+}
+
+component PropertyLine inherits HorizontalLayout {
+    in property <string> label;
+    in property <string> value;
+    spacing: 8px;
+    visible: value != "";
+    Text { width: 112px; text: label; color: Theme.text-secondary; font-size: Theme.font-caption; }
+    Text { text: value; color: Theme.text-primary; font-size: Theme.font-caption; wrap: word-wrap; horizontal-stretch: 1; }
+}
+
+export component DetailsPane inherits Rectangle {
+    in property <Details> details;
+    accessible-role: groupbox;
+    accessible-label: "Details pane";
+    VerticalLayout {
+        padding: 20px;
+        spacing: 16px;
+        alignment: start;
+        if details.count == 0: Text {
+            text: "Select a single file to see its details.";
+            color: Theme.text-secondary;
+            wrap: word-wrap;
+            horizontal-alignment: center;
+        }
+        if details.count > 0: HorizontalLayout {
+            alignment: center;
+            FileIcon { size: 160px; kind: details.count == 1 ? details.kind : 1; thumb: details.thumb; has-thumb: details.has-thumb && details.count == 1; }
+        }
+        if details.count > 0: Text {
+            text: details.count == 1 ? details.name : details.count + " items selected";
+            color: Theme.text-primary;
+            font-size: Theme.font-subtitle;
+            font-weight: 600;
+            wrap: word-wrap;
+        }
+        if details.count == 1: Text { text: details.type-name; color: Theme.text-secondary; }
+        if details.count > 0: HDivider { }
+        if details.count > 0: VerticalLayout {
+            spacing: 8px;
+            Text { text: "Properties"; color: Theme.text-primary; font-weight: 600; }
+            PropertyLine { label: "Size"; value: details.size; }
+            PropertyLine { label: "Date modified"; value: details.count == 1 ? details.date : ""; }
+            PropertyLine { label: "Location"; value: details.location; }
+        }
+    }
+}
+
+component DriveTile inherits Rectangle {
+    in property <DriveData> drive;
+    callback clicked;
+    callback eject;
+    height: 76px;
+    border-radius: Theme.radius;
+    background: touch.has-hover ? Theme.subtle-hover : transparent;
+    accessible-role: button;
+    accessible-label: drive.label + ", " + drive.detail;
+    accessible-action-default => { clicked(); }
+    touch := TouchArea { double-clicked => { root.clicked(); } clicked => { root.clicked(); } }
+    HorizontalLayout {
+        padding: 10px;
+        spacing: 12px;
+        Image {
+            source: drive.kind == 1 ? Icons.usb : drive.kind == 2 ? Icons.network : Icons.drive;
+            width: 40px;
+            height: 40px;
+            y: (parent.height - 40px) / 2;
+            colorize: drive.kind == 4 ? Theme.text-secondary : Theme.text-primary;
+            accessible-role: none;
+        }
+        VerticalLayout {
+            alignment: center;
+            spacing: 4px;
+            horizontal-stretch: 1;
+            Text { text: drive.label; color: Theme.text-primary; overflow: elide; }
+            if drive.usage >= 0: ThinProgress {
+                height: 6px;
+                value: drive.usage;
+                bar-color: drive.low-space ? Theme.danger : Theme.accent;
+            }
+            Text {
+                text: drive.detail;
+                color: drive.low-space ? Theme.danger : Theme.text-secondary;
+                font-size: Theme.font-caption;
+                overflow: elide;
+            }
+        }
+        if drive.can-eject: IconButton {
+            y: (parent.height - 32px) / 2;
+            icon: Icons.eject;
+            label: "Eject " + drive.label;
+            clicked => { root.eject(); }
+        }
+    }
+}
+
+export component ThisPcPage inherits Rectangle {
+    in property <[DriveData]> drives;
+    in property <[DriveData]> network;
+    callback open-drive(bool, int);
+    callback eject-drive(int);
+    property <int> cols: max(1, floor((self.width - 32px) / 320px));
+    property <length> tile-w: (self.width - 32px) / cols;
+    ScrollView {
+        VerticalLayout {
+            padding: 16px;
+            spacing: 8px;
+            alignment: start;
+            Text { text: "Devices and drives (" + drives.length + ")"; color: Theme.text-primary; font-weight: 600; accessible-role: AccessibleRole.text; }
+            Rectangle {
+                height: ceil(drives.length / cols) * 80px;
+                for d[i] in drives: DriveTile {
+                    x: mod(i, cols) * tile-w;
+                    y: floor(i / cols) * 80px;
+                    width: tile-w - 8px;
+                    drive: d;
+                    clicked => { root.open-drive(false, i); }
+                    eject => { root.eject-drive(i); }
+                }
+            }
+            if network.length > 0: Text { text: "Network locations (" + network.length + ")"; color: Theme.text-primary; font-weight: 600; }
+            if network.length > 0: Rectangle {
+                height: ceil(network.length / cols) * 80px;
+                for d[i] in network: DriveTile {
+                    x: mod(i, cols) * tile-w;
+                    y: floor(i / cols) * 80px;
+                    width: tile-w - 8px;
+                    drive: d;
+                    clicked => { root.open-drive(true, i); }
+                }
+            }
+        }
+    }
+}

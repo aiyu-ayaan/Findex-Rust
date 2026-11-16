@@ -1,0 +1,316 @@
+// Small reusable controls. Every interactive control has hover, pressed, focused and disabled states,
+// an accessible name, and a visible 2 px focus ring for keyboard users.
+import { Theme } from "theme.slint";
+
+export component FocusRing inherits Rectangle {
+    in property <bool> show;
+    border-radius: Theme.radius + 2px;
+    border-width: show ? 2px : 0px;
+    border-color: Theme.text-primary;
+}
+
+/// Icon-only button (toolbar, caption, nav buttons). 32 x 32 hit area, 16 or 20 px glyph.
+export component IconButton inherits Rectangle {
+    in property <image> icon;
+    in property <string> label;
+    in property <bool> enabled: true;
+    in property <bool> checked;
+    in property <length> icon-size: 16px;
+    in property <color> hover-bg: Theme.subtle-hover;
+    in property <color> hover-fg: Theme.text-primary;
+    in property <color> fg: Theme.text-primary;
+    callback clicked;
+
+    width: 32px;
+    height: 32px;
+    border-radius: Theme.radius;
+    background: !enabled ? transparent : touch.pressed ? Theme.subtle-pressed : touch.has-hover || checked ? hover-bg : transparent;
+    animate background { duration: Theme.fast; }
+    accessible-role: button;
+    accessible-label: label;
+    accessible-enabled: enabled;
+    accessible-checked: checked;
+    accessible-action-default => { if enabled { clicked(); } }
+
+    Image {
+        source: icon;
+        width: icon-size;
+        height: icon-size;
+        colorize: touch.has-hover && enabled ? hover-fg : fg;
+        opacity: enabled ? 1 : 0.38;
+        accessible-role: none;
+    }
+    fs := FocusScope {
+        focus-on-click: false;
+        enabled: enabled;
+        key-pressed(e) => {
+            if e.text == " " || e.text == "\n" { root.clicked(); return accept; }
+            reject
+        }
+    }
+    touch := TouchArea {
+        enabled: enabled;
+        clicked => { root.clicked(); }
+    }
+    FocusRing { show: fs.has-focus; x: -2px; y: -2px; width: parent.width + 4px; height: parent.height + 4px; }
+}
+
+/// Command bar button: icon plus optional label. Disabled state at 0.38 opacity.
+export component CommandButton inherits Rectangle {
+    in property <image> icon;
+    in property <string> text;
+    in property <bool> show-text: true;
+    in property <bool> enabled: true;
+    in property <bool> checked;
+    in property <bool> dropdown;
+    callback clicked;
+
+    height: 32px;
+    min-width: 32px;
+    border-radius: Theme.radius;
+    background: !enabled ? transparent : touch.pressed ? Theme.subtle-pressed : touch.has-hover || checked ? Theme.subtle-hover : transparent;
+    animate background { duration: Theme.fast; }
+    accessible-role: button;
+    accessible-label: text;
+    accessible-enabled: enabled;
+    accessible-action-default => { if enabled { clicked(); } }
+
+    HorizontalLayout {
+        padding-left: 8px;
+        padding-right: 8px;
+        spacing: 8px;
+        alignment: center;
+        opacity: enabled ? 1 : 0.38;
+        Image {
+            source: icon;
+            width: 20px;
+            height: 20px;
+            y: (parent.height - 20px) / 2;
+            colorize: Theme.text-primary;
+            accessible-role: none;
+        }
+        if show-text: Text {
+            text: root.text;
+            color: Theme.text-primary;
+            font-size: Theme.font-body;
+            vertical-alignment: center;
+        }
+    }
+    fs := FocusScope {
+        focus-on-click: false;
+        enabled: enabled;
+        key-pressed(e) => {
+            if e.text == " " || e.text == "\n" { root.clicked(); return accept; }
+            reject
+        }
+    }
+    touch := TouchArea {
+        enabled: enabled;
+        clicked => { root.clicked(); }
+    }
+    FocusRing { show: fs.has-focus; x: -2px; y: -2px; width: parent.width + 4px; height: parent.height + 4px; }
+}
+
+export component VDivider inherits Rectangle {
+    width: 1px;
+    height: 24px;
+    background: Theme.stroke-strong;
+}
+
+export component HDivider inherits Rectangle {
+    height: 1px;
+    background: Theme.stroke;
+}
+
+/// Thin determinate progress bar. Paused shows the warning colour, errors the danger colour.
+export component ThinProgress inherits Rectangle {
+    in property <float> value;
+    in property <color> bar-color: Theme.accent;
+    height: 4px;
+    border-radius: 2px;
+    background: Theme.stroke-strong;
+    Rectangle {
+        x: 0;
+        width: parent.width * clamp(value, 0, 1);
+        height: parent.height;
+        border-radius: 2px;
+        background: bar-color;
+        animate width { duration: Theme.progress-tick; easing: linear; }
+    }
+}
+
+/// Indeterminate 2 px bar shown under the address row while a folder loads.
+export component LoadingBar inherits Rectangle {
+    in property <bool> active;
+    height: 2px;
+    clip: true;
+    property <float> phase: active && !Theme.reduce-motion ? mod(animation-tick() / 1.2s, 1) : 0.3;
+    if active: Rectangle {
+        width: parent.width * 0.3;
+        x: (parent.width * 1.3) * phase - self.width;
+        background: Theme.accent;
+        border-radius: 1px;
+    }
+}
+
+/// One row of a flyout menu: 32 px, icon, label, right-aligned shortcut hint.
+export component MenuRow inherits Rectangle {
+    in property <image> icon;
+    in property <string> text;
+    in property <string> shortcut;
+    in property <bool> enabled: true;
+    in property <bool> danger;
+    callback clicked;
+    height: 32px;
+    border-radius: Theme.radius;
+    background: touch.has-hover && enabled ? Theme.subtle-hover : transparent;
+    accessible-role: button;
+    accessible-label: text;
+    accessible-enabled: enabled;
+    accessible-action-default => { if enabled { clicked(); } }
+    HorizontalLayout {
+        padding-left: 12px;
+        padding-right: 12px;
+        spacing: 12px;
+        opacity: enabled ? 1 : 0.38;
+        Image {
+            source: icon;
+            width: 16px;
+            height: 16px;
+            y: (parent.height - 16px) / 2;
+            colorize: danger ? Theme.danger : Theme.text-primary;
+            accessible-role: none;
+        }
+        Text {
+            text: root.text;
+            color: Theme.text-primary;
+            vertical-alignment: center;
+            horizontal-stretch: 1;
+        }
+        Text {
+            text: root.shortcut;
+            color: Theme.text-secondary;
+            font-size: Theme.font-caption;
+            vertical-alignment: center;
+        }
+    }
+    touch := TouchArea {
+        enabled: enabled;
+        clicked => { root.clicked(); }
+    }
+}
+
+/// Flyout surface: acrylic stand-in, 8 px radius, 1 px stroke, soft shadow (elevation level 1).
+export component Flyout inherits Rectangle {
+    background: Theme.acrylic;
+    border-radius: Theme.radius-overlay;
+    border-width: 1px;
+    border-color: Theme.stroke-strong;
+    drop-shadow-blur: 16px;
+    drop-shadow-offset-y: 4px;
+    drop-shadow-color: Theme.dark ? #00000080 : #00000030;
+}
+
+/// Accent-filled primary button or neutral secondary button for dialogs.
+export component DialogButton inherits Rectangle {
+    in property <string> text;
+    in property <bool> primary;
+    in property <bool> danger;
+    callback clicked;
+    forward-focus: fs;
+    height: 32px;
+    min-width: 96px;
+    border-radius: Theme.radius;
+    border-width: primary ? 0px : 1px;
+    border-color: Theme.stroke-strong;
+    background: primary ? (danger ? Theme.danger : touch.has-hover ? Theme.accent-hover : Theme.accent)
+        : touch.has-hover ? Theme.control-hover : Theme.control;
+    accessible-role: button;
+    accessible-label: text;
+    accessible-action-default => { clicked(); }
+    Text {
+        text: root.text;
+        color: primary ? Theme.on-accent : Theme.text-primary;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+    }
+    fs := FocusScope {
+        key-pressed(e) => {
+            if e.text == " " || e.text == "\n" { root.clicked(); return accept; }
+            reject
+        }
+    }
+    touch := TouchArea { clicked => { fs.focus(); root.clicked(); } }
+    FocusRing { show: fs.has-focus; x: -2px; y: -2px; width: parent.width + 4px; height: parent.height + 4px; }
+}
+
+/// Text field with the Windows 11 bottom accent line when focused.
+export component TextField inherits Rectangle {
+    in-out property <string> text <=> input.text;
+    in property <string> placeholder;
+    in property <image> icon;
+    in property <bool> has-icon;
+    out property <bool> has-focus: input.has-focus;
+    callback edited(string);
+    callback accepted(string);
+    callback escape();
+    forward-focus: input;
+    height: 32px;
+    border-radius: Theme.radius;
+    background: input.has-focus ? (Theme.dark ? #1e1e1ef0 : #fffffff0) : touch.has-hover ? Theme.control-hover : Theme.control;
+    border-width: 1px;
+    border-color: Theme.stroke-strong;
+    accessible-role: text-input;
+    accessible-label: placeholder;
+    accessible-value: text;
+
+    public function select-all() { input.select-all(); }
+    public function focus-input() { input.focus(); }
+
+    touch := TouchArea { mouse-cursor: MouseCursor.text; }
+    HorizontalLayout {
+        padding-left: 10px;
+        padding-right: 8px;
+        spacing: 8px;
+        input := TextInput {
+            accessible-role: none;
+            vertical-alignment: center;
+            color: Theme.text-primary;
+            selection-background-color: Theme.accent;
+            selection-foreground-color: Theme.on-accent;
+            single-line: true;
+            font-size: Theme.font-body;
+            edited => { root.edited(self.text); }
+            accepted => { root.accepted(self.text); }
+            key-pressed(e) => {
+                if e.text == Key.Escape { root.escape(); return accept; }
+                reject
+            }
+            Text {
+                visible: input.text == "";
+                text: root.placeholder;
+                color: Theme.text-secondary;
+                vertical-alignment: center;
+                width: parent.width;
+                height: parent.height;
+                overflow: elide;
+            }
+        }
+        if has-icon: Image {
+            source: icon;
+            width: 16px;
+            height: 16px;
+            y: (parent.height - 16px) / 2;
+            colorize: Theme.text-secondary;
+            accessible-role: none;
+        }
+    }
+    Rectangle {
+        y: parent.height - 2px;
+        height: 2px;
+        x: 1px;
+        width: parent.width - 2px;
+        border-radius: 1px;
+        background: input.has-focus ? Theme.accent : transparent;
+    }
+}

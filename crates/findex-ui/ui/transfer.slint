@@ -1,0 +1,196 @@
+// Transfer window: one window for every copy, move, trash and delete, like the Windows 11 copy dialog.
+// Large "% complete", speed graph over progress with a current-speed line, and details.
+import { ScrollView } from "std-widgets.slint";
+import { Theme } from "theme.slint";
+import { Icons } from "icons.slint";
+import { IconButton, ThinProgress, HDivider } from "controls.slint";
+import { JobData } from "types.slint";
+
+/// Graph area size; the Rust side draws the path in this exact pixel space (see `graph_path`).
+export global GraphMetrics {
+    out property <length> width: 472px;
+    out property <length> height: 96px;
+}
+
+component DetailLine inherits HorizontalLayout {
+    in property <string> label;
+    in property <string> value;
+    spacing: 12px;
+    Text { width: 128px; text: label; color: Theme.text-secondary; font-size: Theme.font-caption; }
+    Text { text: value; color: Theme.text-primary; font-size: Theme.font-caption; overflow: elide; horizontal-stretch: 1; }
+}
+
+component SpeedGraph inherits Rectangle {
+    in property <JobData> job;
+    in property <color> tone;
+    width: GraphMetrics.width;
+    height: GraphMetrics.height;
+    border-width: 1px;
+    border-color: Theme.stroke-strong;
+    background: Theme.dark ? #ffffff08 : #00000005;
+    clip: true;
+    accessible-role: none;
+
+    // Subtle gridlines at quarters.
+    for q in 3: Rectangle {
+        y: parent.height * (q + 1) / 4;
+        height: 1px;
+        background: Theme.stroke;
+    }
+    // Completed part: tinted band up to the current progress.
+    Rectangle {
+        x: 0;
+        width: parent.width * clamp(job.progress, 0, 1);
+        background: tone.with-alpha(0.10);
+        animate width { duration: Theme.progress-tick; easing: linear; }
+    }
+    Path {
+        width: parent.width;
+        height: parent.height;
+        viewbox-width: GraphMetrics.width / 1px;
+        viewbox-height: GraphMetrics.height / 1px;
+        commands: job.graph;
+        fill: tone.with-alpha(0.35);
+        stroke: tone;
+        stroke-width: 1.5px;
+    }
+    // Current speed line and label.
+    if job.state == 1 && job.speed-level > 0: Rectangle {
+        y: parent.height * (1 - job.speed-level * 0.85) - 1px;
+        height: 1px;
+        background: Theme.text-secondary;
+        animate y { duration: Theme.progress-tick; easing: linear; }
+    }
+    if job.speed != "": Rectangle {
+        x: parent.width - self.width - 6px;
+        y: 6px;
+        width: speed-text.preferred-width + 12px;
+        height: 20px;
+        border-radius: Theme.radius;
+        background: Theme.dialog.with-alpha(0.85);
+        speed-text := Text {
+            text: "Speed: " + job.speed;
+            color: Theme.text-primary;
+            font-size: Theme.font-caption;
+        }
+    }
+}
+
+component JobPanel inherits Rectangle {
+    in property <JobData> job;
+    callback pause();
+    callback cancel();
+    // Paused uses the warning colour, errors the danger colour, done the success colour.
+    property <color> tone: job.state == 2 ? Theme.warning : job.state == 4 ? Theme.danger : job.state == 3 ? Theme.success : Theme.accent;
+    height: 294px;
+    accessible-role: groupbox;
+    accessible-label: job.title;
+
+    VerticalLayout {
+        padding: 24px;
+        padding-top: 16px;
+        spacing: 10px;
+        Text { text: job.title; color: Theme.text-secondary; overflow: elide; }
+        HorizontalLayout {
+            spacing: 8px;
+            Text {
+                text: job.state == 3 ? "Done" : job.state == 4 ? "Couldn't finish" : job.state == 5 ? "Cancelled"
+                    : job.state == 0 ? "Waiting" : round(job.progress * 100) + "% complete" + (job.state == 2 ? "  ·  Paused" : "");
+                color: job.state == 4 ? Theme.danger : Theme.text-primary;
+                font-size: Theme.font-subtitle;
+                font-weight: 600;
+                vertical-alignment: center;
+                horizontal-stretch: 1;
+                accessible-role: AccessibleRole.text;
+            }
+            if job.state <= 2: IconButton {
+                icon: job.state == 2 ? Icons.play : Icons.pause;
+                label: job.state == 2 ? "Resume" : "Pause";
+                icon-size: 16px;
+                checked: job.state == 2;
+                clicked => { root.pause(); }
+            }
+            if job.state <= 2: IconButton {
+                icon: Icons.dismiss;
+                label: "Cancel";
+                clicked => { root.cancel(); }
+            }
+        }
+        SpeedGraph { job: root.job; tone: root.tone; }
+        ThinProgress { width: GraphMetrics.width; value: job.state == 3 ? 1 : job.progress; bar-color: root.tone; accessible-role: progress-indicator; accessible-value: round(job.progress * 100) + "%"; }
+        DetailLine { label: "Name"; value: job.name; }
+        DetailLine { label: "Time remaining"; value: job.time-left; }
+        DetailLine { label: "Items remaining"; value: job.items-left; }
+    }
+}
+
+export component TransferWindow inherits Window {
+    title: "Transfers";
+    icon: Icons.transfer;
+    no-frame: true;
+    background: transparent;
+    default-font-family: "Inter";
+    default-font-size: Theme.font-body;
+    in property <[JobData]> jobs;
+    in property <int> active-jobs;
+    property <length> content-h: min(3, max(1, jobs.length)) * 295px;
+    width: 520px;
+    min-height: 48px + content-h;
+    max-height: 48px + content-h;
+    callback pause(int);
+    callback cancel(int);
+    callback close-requested();
+
+    Rectangle {
+        background: Theme.mica;
+        border-radius: Theme.radius-overlay;
+        border-width: 1px;
+        border-color: Theme.stroke-window;
+        clip: true;
+        VerticalLayout {
+            // Title bar
+            Rectangle {
+                height: 48px;
+                WindowMoveArea { }
+                HorizontalLayout {
+                    padding-left: 16px;
+                    spacing: 12px;
+                    Image { source: Icons.transfer; width: 16px; height: 16px; y: (parent.height - 16px) / 2; colorize: Theme.accent; accessible-role: none; }
+                    Text {
+                        text: active-jobs == 0 ? "Transfers finished" : active-jobs == 1 ? "1 operation running" : active-jobs + " operations running";
+                        color: Theme.text-primary;
+                        vertical-alignment: center;
+                        horizontal-stretch: 1;
+                    }
+                    Rectangle {
+                        width: 46px;
+                        background: ct.has-hover ? #c42b1c : transparent;
+                        accessible-role: button;
+                        accessible-label: "Close";
+                        accessible-action-default => { root.close-requested(); }
+                        Image { source: Icons.dismiss; width: 16px; height: 16px; colorize: ct.has-hover ? #ffffff : Theme.text-primary; accessible-role: none; }
+                        ct := TouchArea { clicked => { root.close-requested(); } }
+                    }
+                }
+            }
+            Rectangle {
+                background: Theme.layer;
+                border-width: 1px;
+                border-color: Theme.stroke;
+                ScrollView {
+                    VerticalLayout {
+                        alignment: start;
+                        for j[i] in jobs: VerticalLayout {
+                            if i > 0: HDivider { }
+                            JobPanel {
+                                job: j;
+                                pause => { root.pause(j.id); }
+                                cancel => { root.cancel(j.id); }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

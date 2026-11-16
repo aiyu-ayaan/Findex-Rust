@@ -1,0 +1,536 @@
+// Findex main window: Windows 11 File Explorer layout, light and dark, translucent Mica-style surfaces.
+import { Switch } from "std-widgets.slint";
+import { Palette } from "std-widgets.slint";
+import "fonts/Inter.ttf";
+import { Theme } from "theme.slint";
+import { Icons } from "icons.slint";
+import { MenuRow, Flyout, HDivider, IconButton, LoadingBar } from "controls.slint";
+import { FileRow, TabData, Crumb, NavItem, DriveData, JobData, Details } from "types.slint";
+import { TabStrip, CommandBar, AddressBar } from "chrome.slint";
+import { DetailsView, GridView } from "fileviews.slint";
+import { NavPane, StatusBar, DetailsPane, ThisPcPage } from "panes.slint";
+import { Dialog, Toast } from "overlays.slint";
+import { TransferWindow } from "transfer.slint";
+
+export { TransferWindow, Theme, Palette, FileRow, TabData, Crumb, NavItem, DriveData, JobData, Details }
+
+component CheckRow inherits MenuRow {
+    in property <bool> checked;
+    property <image> blank;
+    icon: checked ? Icons.check : blank;
+}
+
+component Segment inherits Rectangle {
+    in property <string> text;
+    in property <bool> selected;
+    callback clicked;
+    height: 32px;
+    border-radius: Theme.radius;
+    background: selected ? Theme.accent : t.has-hover ? Theme.subtle-hover : Theme.control;
+    border-width: selected ? 0px : 1px;
+    border-color: Theme.stroke-strong;
+    accessible-role: button;
+    accessible-label: text;
+    accessible-checked: selected;
+    accessible-action-default => { clicked(); }
+    Text { text: root.text; color: selected ? Theme.on-accent : Theme.text-primary; }
+    t := TouchArea { clicked => { root.clicked(); } }
+}
+
+export component AppWindow inherits Window {
+    title: "Findex";
+    icon: Icons.folder-filled;
+    no-frame: true;
+    resize-border-width: Theme.maximized ? 0px : 6px;
+    background: transparent;
+    min-width: 640px;
+    min-height: 400px;
+    preferred-width: 1280px;
+    preferred-height: 800px;
+    default-font-family: "Inter";
+    default-font-size: Theme.font-body;
+    forward-focus: list-scope;
+
+    // ---- state from Rust ----
+    in property <[TabData]> tabs;
+    in property <int> active-tab;
+    in property <[Crumb]> crumbs;
+    in property <string> path-text;
+    in property <string> folder-name;
+    in property <bool> can-back;
+    in property <bool> can-forward;
+    in property <bool> can-up;
+    in property <[FileRow]> rows;
+    in property <int> view-mode: 5;
+    in property <int> sort-key;
+    in property <bool> sort-desc;
+    in property <int> focus-row: -1;
+    in property <int> selected-count;
+    in property <bool> loading;
+    in property <string> error-text;
+    in property <bool> search-mode;
+    in-out property <string> search-text;
+    in property <bool> this-pc;
+    in property <[NavItem]> nav-items;
+    in property <[DriveData]> drives;
+    in property <[DriveData]> network-drives;
+    in property <[JobData]> jobs;
+    in property <int> active-jobs;
+    in property <float> jobs-progress;
+    in property <string> status-text;
+    in property <string> selection-text;
+    in property <Details> details;
+    in-out property <bool> details-pane: false;
+    in property <bool> can-paste;
+    in property <bool> show-hidden;
+    in property <int> theme-mode;
+    in property <bool> default-fm;
+    in property <string> default-fm-text;
+    in property <string> toast-text;
+    in property <bool> toast-undo;
+    out property <int> grid-cols: grid.cols;
+
+    // ---- requests to Rust ----
+    callback navigate(string);
+    callback path-submitted(string);
+    callback go-back();
+    callback go-forward();
+    callback go-up();
+    callback refresh();
+    callback new-tab();
+    callback close-tab(int);
+    callback select-tab(int);
+    callback item-down(int, bool, bool, bool);
+    callback item-activated(int);
+    callback background-down(bool);
+    callback sort-by(int, bool);
+    callback set-view(int);
+    callback key(string, bool, bool, bool, bool) -> bool;
+    callback cut();
+    callback copy();
+    callback paste();
+    callback rename-start();
+    callback rename-commit(string);
+    callback delete-items(bool);
+    callback delete-confirmed();
+    callback new-folder();
+    callback new-file();
+    callback copy-path();
+    callback open-in-new-tab();
+    callback select-all();
+    callback search-edited(string);
+    callback search-submitted(string);
+    callback search-cleared();
+    callback nav-activate(int);
+    callback drive-open(bool, int);
+    callback drive-eject(int);
+    callback job-pause(int);
+    callback job-cancel(int);
+    callback clear-finished();
+    callback set-theme(int);
+    callback set-transparency(bool);
+    callback set-show-hidden(bool);
+    callback set-compact(bool);
+    callback toggle-default-fm();
+    callback undo();
+    callback window-changed();
+    callback show-transfers();
+
+    // ---- functions Rust calls ----
+    public function show-rename(name: string) {
+        dialog-kind = 1;
+        dialog-input = name;
+        dialog.open-focus();
+    }
+    public function confirm-delete(count: int) {
+        delete-count = count;
+        dialog-kind = 2;
+        dialog.open-focus();
+    }
+    public function focus-list() { list-scope.focus(); }
+    /// Puts text on the system clipboard (Slint exposes the clipboard through text inputs).
+    public function copy-text(t: string) {
+        clip.text = t;
+        clip.select-all();
+        clip.copy();
+    }
+    public function edit-path() { address.edit-path(); }
+    public function focus-search() { address.focus-search(); }
+    public function show-context(x: length, y: length, on-item: bool) {
+        menu-x = min(x, root.width - 268px);
+        menu-y = min(y, root.height - (on-item ? 300px : 240px));
+        menu-on-item = on-item;
+        context-menu.show();
+    }
+
+    property <int> dialog-kind; // 0 none, 1 rename, 2 delete permanently
+    property <string> dialog-input;
+    property <int> delete-count;
+    property <length> menu-x;
+    property <length> menu-y;
+    property <bool> menu-on-item;
+    property <length> pop-x;
+    property <length> pop-y;
+    property <length> mouse-x;
+    property <length> mouse-y;
+
+    changed width => { Theme.maximized = root.maximized; root.window-changed(); }
+    changed maximized => { Theme.maximized = root.maximized; }
+
+    // Shortcuts are decided in Rust. While a text field has focus only global chords are taken
+    // (Ctrl+T, Ctrl+L, F5, ...), so typing is never captured.
+    capture := FocusScope {
+        x: 0;
+        y: 0;
+        width: root.width;
+        height: root.height;
+        focus-on-click: false;
+        focus-on-tab-navigation: false;
+        capture-key-pressed(e) => {
+            if root.dialog-kind != 0 { return reject; } // the modal dialog handles its own keys
+            if root.key(e.text, e.modifiers.control, e.modifiers.shift, e.modifiers.alt, TextInputInterface.text-input-focused) { return accept; }
+            reject
+        }
+    frame := Rectangle {
+        x: 0;
+        y: 0;
+        width: parent.width;
+        height: parent.height;
+        background: Theme.mica;
+        border-radius: Theme.window-radius;
+        border-width: Theme.maximized ? 0px : 1px;
+        border-color: Theme.stroke-window;
+        clip: true;
+
+        VerticalLayout {
+            TabStrip {
+                tabs: root.tabs;
+                active: root.active-tab;
+                select(i) => { root.select-tab(i); }
+                close(i) => { root.close-tab(i); }
+                new-tab => { root.new-tab(); }
+                minimize => { root.minimized = true; }
+                toggle-maximize => { root.maximized = !root.maximized; }
+                close-window => { root.close(); }
+            }
+            // Toolbar layer, merged with the selected tab.
+            Rectangle {
+                background: Theme.layer-alt;
+                VerticalLayout {
+                    address := AddressBar {
+                        crumbs: root.crumbs;
+                        can-back: root.can-back;
+                        can-forward: root.can-forward;
+                        can-up: root.can-up;
+                        path-text: root.path-text;
+                        search-placeholder: "Search " + root.folder-name;
+                        search-text <=> root.search-text;
+                        back => { root.go-back(); }
+                        forward => { root.go-forward(); }
+                        up => { root.go-up(); }
+                        refresh => { root.refresh(); }
+                        navigate(p) => { root.navigate(p); }
+                        path-submitted(p) => { root.path-submitted(p); root.focus-list(); }
+                        search-edited(t) => { root.search-edited(t); }
+                        search-submitted(t) => { root.search-submitted(t); }
+                        search-cleared => { root.search-cleared(); root.focus-list(); }
+                    }
+                    HDivider { }
+                    CommandBar {
+                        has-selection: root.selected-count > 0 && !root.this-pc;
+                        single-selection: root.selected-count == 1 && !root.search-mode;
+                        can-paste: root.can-paste;
+                        in-folder: !root.this-pc && !root.search-mode;
+                        details-pane: root.details-pane;
+                        new-menu(x, y) => { root.pop-x = x; root.pop-y = y; new-popup.show(); }
+                        cut => { root.cut(); }
+                        copy => { root.copy(); }
+                        paste => { root.paste(); }
+                        rename => { root.rename-start(); }
+                        delete => { root.delete-items(false); }
+                        sort-menu(x, y) => { root.pop-x = x; root.pop-y = y; sort-popup.show(); }
+                        view-menu(x, y) => { root.pop-x = x; root.pop-y = y; view-popup.show(); }
+                        toggle-details => { root.details-pane = !root.details-pane; }
+                        more-menu(x, y) => { root.pop-x = x; root.pop-y = y; more-popup.show(); }
+                    }
+                    LoadingBar { active: root.loading; }
+                }
+            }
+            HorizontalLayout {
+                vertical-stretch: 1;
+                if root.width >= 700px: NavPane {
+                    width: root.width >= 900px ? Theme.nav-width : 200px;
+                    items: root.nav-items;
+                    activate(i) => { root.nav-activate(i); }
+                }
+                // Content layer: rounded top-left corner like Explorer.
+                content := Rectangle {
+                    horizontal-stretch: 1;
+                    background: Theme.layer;
+                    border-top-left-radius: root.width >= 700px ? Theme.radius-overlay : 0px;
+                    border-width: 1px;
+                    border-color: Theme.stroke;
+                    clip: true;
+
+                    list-scope := FocusScope {
+                        if root.this-pc: ThisPcPage {
+                            drives: root.drives;
+                            network: root.network-drives;
+                            open-drive(net, i) => { root.drive-open(net, i); }
+                            eject-drive(i) => { root.drive-eject(i); }
+                        }
+                        if !root.this-pc && root.view-mode == 5: DetailsView {
+                            rows: root.rows;
+                            search-mode: root.search-mode;
+                            sort-key: root.sort-key;
+                            sort-desc: root.sort-desc;
+                            focus-row: root.focus-row;
+                            list-focused: list-scope.has-focus;
+                            sort(k) => { root.sort-by(k, k == root.sort-key ? !root.sort-desc : false); }
+                            item-down(i, ctrl, shift, right, x, y) => { root.on-item-down(i, ctrl, shift, right, x, y); }
+                            item-activated(i) => { root.item-activated(i); }
+                            background-down(right, x, y) => { root.on-background-down(right, x, y); }
+                        }
+                        grid := GridView {
+                            visible: !root.this-pc && root.view-mode != 5;
+                            rows: self.visible ? root.rows : [];
+                            mode: root.view-mode;
+                            focus-row: root.focus-row;
+                            list-focused: list-scope.has-focus;
+                            item-down(i, ctrl, shift, right, x, y) => { root.on-item-down(i, ctrl, shift, right, x, y); }
+                            item-activated(i) => { root.item-activated(i); }
+                            background-down(right, x, y) => { root.on-background-down(right, x, y); }
+                        }
+                        // Empty and error states (no spinner over content; rows stream in).
+                        if !root.this-pc && !root.loading && root.rows.length == 0: VerticalLayout {
+                            alignment: center;
+                            spacing: 8px;
+                            HorizontalLayout {
+                                alignment: center;
+                                Image {
+                                    source: root.error-text != "" ? Icons.info : root.search-mode ? Icons.search : Icons.folder;
+                                    width: 48px;
+                                    height: 48px;
+                                    colorize: root.error-text != "" ? Theme.danger : Theme.text-secondary;
+                                    accessible-role: none;
+                                }
+                            }
+                            Text {
+                                text: root.error-text != "" ? root.error-text : root.search-mode ? "No items match your search." : "This folder is empty.";
+                                color: Theme.text-primary;
+                                horizontal-alignment: center;
+                                wrap: word-wrap;
+                                accessible-role: AccessibleRole.text;
+                            }
+                            if root.error-text != "": HorizontalLayout {
+                                alignment: center;
+                                Rectangle {
+                                    width: 96px;
+                                    height: 32px;
+                                    border-radius: Theme.radius;
+                                    background: Theme.accent;
+                                    accessible-role: button;
+                                    accessible-label: "Retry";
+                                    accessible-action-default => { root.refresh(); }
+                                    Text { text: "Retry"; color: Theme.on-accent; }
+                                    TouchArea { clicked => { root.refresh(); } }
+                                }
+                            }
+                        }
+                    }
+                }
+                if root.details-pane && root.width >= 1100px && !root.this-pc: DetailsPane {
+                    width: Theme.details-width;
+                    details: root.details;
+                }
+            }
+            StatusBar {
+                left-text: root.status-text;
+                selection-text: root.selection-text;
+                active-jobs: root.active-jobs;
+                jobs-progress: root.jobs-progress;
+                view-mode: root.view-mode;
+                open-transfers => { root.show-transfers(); }
+                set-view(m) => { root.set-view(m); }
+            }
+        }
+    }
+
+    }
+
+    function on-item-down(i: int, ctrl: bool, shift: bool, right: bool, x: length, y: length) {
+        root.item-down(i, ctrl, shift, right);
+        list-scope.focus();
+        if right { root.show-context(x, y, true); }
+    }
+    function on-background-down(right: bool, x: length, y: length) {
+        root.background-down(right);
+        list-scope.focus();
+        if right { root.show-context(x, y, false); }
+    }
+
+    // ---- flyouts ----
+    new-popup := PopupWindow {
+        x: root.pop-x;
+        y: root.pop-y;
+        Flyout {
+            width: 220px;
+            height: nl.preferred-height;
+            nl := VerticalLayout {
+                padding: 4px;
+                MenuRow { icon: Icons.new-folder; text: "Folder"; shortcut: "Ctrl+Shift+N"; clicked => { root.new-folder(); } }
+                MenuRow { icon: Icons.new-file; text: "Text document"; clicked => { root.new-file(); } }
+            }
+        }
+    }
+    sort-popup := PopupWindow {
+        x: root.pop-x;
+        y: root.pop-y;
+        Flyout {
+            width: 220px;
+            height: sl.preferred-height;
+            sl := VerticalLayout {
+                padding: 4px;
+                CheckRow { text: "Name"; checked: root.sort-key == 0; clicked => { root.sort-by(0, root.sort-desc); } }
+                CheckRow { text: "Date modified"; checked: root.sort-key == 1; clicked => { root.sort-by(1, root.sort-desc); } }
+                CheckRow { text: "Type"; checked: root.sort-key == 2; clicked => { root.sort-by(2, root.sort-desc); } }
+                CheckRow { text: "Size"; checked: root.sort-key == 3; clicked => { root.sort-by(3, root.sort-desc); } }
+                HDivider { }
+                CheckRow { text: "Ascending"; checked: !root.sort-desc; clicked => { root.sort-by(root.sort-key, false); } }
+                CheckRow { text: "Descending"; checked: root.sort-desc; clicked => { root.sort-by(root.sort-key, true); } }
+            }
+        }
+    }
+    view-popup := PopupWindow {
+        x: root.pop-x;
+        y: root.pop-y;
+        Flyout {
+            width: 260px;
+            height: vl.preferred-height;
+            vl := VerticalLayout {
+                padding: 4px;
+                CheckRow { text: "Extra large icons"; shortcut: "Ctrl+Shift+1"; checked: root.view-mode == 0; clicked => { root.set-view(0); } }
+                CheckRow { text: "Large icons"; shortcut: "Ctrl+Shift+2"; checked: root.view-mode == 1; clicked => { root.set-view(1); } }
+                CheckRow { text: "Medium icons"; shortcut: "Ctrl+Shift+3"; checked: root.view-mode == 2; clicked => { root.set-view(2); } }
+                CheckRow { text: "Small icons"; shortcut: "Ctrl+Shift+4"; checked: root.view-mode == 3; clicked => { root.set-view(3); } }
+                CheckRow { text: "List"; shortcut: "Ctrl+Shift+5"; checked: root.view-mode == 4; clicked => { root.set-view(4); } }
+                CheckRow { text: "Details"; shortcut: "Ctrl+Shift+6"; checked: root.view-mode == 5; clicked => { root.set-view(5); } }
+                CheckRow { text: "Tiles"; shortcut: "Ctrl+Shift+7"; checked: root.view-mode == 6; clicked => { root.set-view(6); } }
+                CheckRow { text: "Content"; shortcut: "Ctrl+Shift+8"; checked: root.view-mode == 7; clicked => { root.set-view(7); } }
+                HDivider { }
+                CheckRow { text: "Compact view"; checked: Theme.compact; clicked => { root.set-compact(!Theme.compact); } }
+                CheckRow { text: "Hidden items"; shortcut: "Ctrl+H"; checked: root.show-hidden; clicked => { root.set-show-hidden(!root.show-hidden); } }
+            }
+        }
+    }
+    more-popup := PopupWindow {
+        x: root.pop-x;
+        y: root.pop-y;
+        Flyout {
+            width: 260px;
+            height: ml.preferred-height;
+            ml := VerticalLayout {
+                padding: 4px;
+                MenuRow { icon: Icons.check; text: "Select all"; shortcut: "Ctrl+A"; clicked => { root.select-all(); } }
+                MenuRow { icon: Icons.copy; text: "Copy as path"; shortcut: "Ctrl+Shift+C"; enabled: root.selected-count > 0; clicked => { root.copy-path(); } }
+                MenuRow { icon: Icons.undo; text: "Undo"; shortcut: "Ctrl+Z"; enabled: root.toast-undo; clicked => { root.undo(); } }
+                MenuRow { icon: Icons.transfer; text: "Transfers"; clicked => { root.show-transfers(); } }
+                HDivider { }
+                MenuRow { icon: Icons.settings; text: "Settings"; clicked => { settings-popup.show(); } }
+            }
+        }
+    }
+    context-menu := PopupWindow {
+        x: root.menu-x;
+        y: root.menu-y;
+        Flyout {
+            width: 260px;
+            height: cl.preferred-height;
+            cl := VerticalLayout {
+                padding: 4px;
+                // Compact icon row, Windows 11 style.
+                if root.menu-on-item: HorizontalLayout {
+                    padding: 4px;
+                    spacing: 4px;
+                    IconButton { icon: Icons.cut; label: "Cut"; clicked => { root.cut(); context-menu.close(); } }
+                    IconButton { icon: Icons.copy; label: "Copy"; clicked => { root.copy(); context-menu.close(); } }
+                    IconButton { icon: Icons.rename; label: "Rename"; enabled: root.selected-count == 1 && !root.search-mode; clicked => { root.rename-start(); context-menu.close(); } }
+                    IconButton { icon: Icons.delete; label: "Delete"; clicked => { root.delete-items(false); context-menu.close(); } }
+                }
+                if root.menu-on-item: HDivider { }
+                if root.menu-on-item: MenuRow { icon: Icons.open; text: "Open"; shortcut: "Enter"; clicked => { root.item-activated(root.focus-row); } }
+                if root.menu-on-item: MenuRow { icon: Icons.add; text: "Open in new tab"; enabled: root.details.kind == 0; clicked => { root.open-in-new-tab(); } }
+                if root.menu-on-item: MenuRow { icon: Icons.copy; text: "Copy as path"; shortcut: "Ctrl+Shift+C"; clicked => { root.copy-path(); } }
+                if root.menu-on-item: MenuRow { icon: Icons.delete; text: "Delete permanently"; shortcut: "Shift+Del"; danger: true; clicked => { root.delete-items(true); } }
+                if !root.menu-on-item: MenuRow { icon: Icons.view-details; text: "View"; clicked => { root.pop-x = root.menu-x; root.pop-y = root.menu-y; view-popup.show(); } }
+                if !root.menu-on-item: MenuRow { icon: Icons.sort; text: "Sort by"; clicked => { root.pop-x = root.menu-x; root.pop-y = root.menu-y; sort-popup.show(); } }
+                if !root.menu-on-item: MenuRow { icon: Icons.refresh; text: "Refresh"; shortcut: "F5"; clicked => { root.refresh(); } }
+                if !root.menu-on-item: HDivider { }
+                if !root.menu-on-item: MenuRow { icon: Icons.paste; text: "Paste"; shortcut: "Ctrl+V"; enabled: root.can-paste && !root.this-pc && !root.search-mode; clicked => { root.paste(); } }
+                if !root.menu-on-item: MenuRow { icon: Icons.new-folder; text: "New folder"; shortcut: "Ctrl+Shift+N"; enabled: !root.this-pc && !root.search-mode; clicked => { root.new-folder(); } }
+                if !root.menu-on-item: MenuRow { icon: Icons.check; text: "Select all"; shortcut: "Ctrl+A"; clicked => { root.select-all(); } }
+            }
+        }
+    }
+    settings-popup := PopupWindow {
+        x: root.width - 380px;
+        y: 96px;
+        close-policy: close-on-click-outside;
+        Flyout {
+            width: 360px;
+            height: stl.preferred-height;
+            stl := VerticalLayout {
+                padding: 16px;
+                spacing: 12px;
+                Text { text: "Settings"; color: Theme.text-primary; font-size: Theme.font-subtitle; font-weight: 600; }
+                Text { text: "App theme"; color: Theme.text-secondary; font-size: Theme.font-caption; }
+                HorizontalLayout {
+                    spacing: 4px;
+                    Segment { text: "System"; selected: root.theme-mode == 0; horizontal-stretch: 1; clicked => { root.set-theme(0); } }
+                    Segment { text: "Light"; selected: root.theme-mode == 1; horizontal-stretch: 1; clicked => { root.set-theme(1); } }
+                    Segment { text: "Dark"; selected: root.theme-mode == 2; horizontal-stretch: 1; clicked => { root.set-theme(2); } }
+                }
+                Switch { text: "Transparency effects"; checked: Theme.transparency; toggled => { root.set-transparency(self.checked); } }
+                Switch { text: "Show hidden items"; checked: root.show-hidden; toggled => { root.set-show-hidden(self.checked); } }
+                Switch { text: "Compact view"; checked: Theme.compact; toggled => { root.set-compact(self.checked); } }
+                HDivider { }
+                Text { text: "Default file manager"; color: Theme.text-secondary; font-size: Theme.font-caption; }
+                Text { text: root.default-fm-text; color: Theme.text-primary; wrap: word-wrap; }
+                Segment {
+                    text: root.default-fm ? "Restore previous file manager" : "Make Findex the default";
+                    selected: !root.default-fm;
+                    clicked => { root.toggle-default-fm(); }
+                }
+            }
+        }
+    }
+
+    // ---- modal dialogs ----
+    dialog := Dialog {
+        visible: root.dialog-kind != 0;
+        title: root.dialog-kind == 1 ? "Rename" : "Delete permanently?";
+        message: root.dialog-kind == 2 ? (root.delete-count == 1 ? "This item will be deleted and cannot be restored from the Trash." : root.delete-count + " items will be deleted and cannot be restored from the Trash.") : "";
+        primary-text: root.dialog-kind == 1 ? "Rename" : "Delete";
+        danger: root.dialog-kind == 2;
+        has-input: root.dialog-kind == 1;
+        input-label: "New name";
+        input-text <=> root.dialog-input;
+        primary => {
+            if root.dialog-kind == 1 { root.rename-commit(root.dialog-input); }
+            if root.dialog-kind == 2 { root.delete-confirmed(); }
+            root.dialog-kind = 0;
+            list-scope.focus();
+        }
+        dismiss => { root.dialog-kind = 0; list-scope.focus(); }
+    }
+
+    clip := TextInput { visible: false; width: 0; height: 0; }
+
+    if root.toast-text != "": Toast {
+        x: (root.width - self.width) / 2;
+        y: root.height - Theme.status-height - 56px;
+        text: root.toast-text;
+        can-undo: root.toast-undo;
+        undo => { root.undo(); }
+    }
+}

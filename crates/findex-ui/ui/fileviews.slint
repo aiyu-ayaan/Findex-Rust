@@ -1,0 +1,379 @@
+// File views. Every view is virtualized: only visible rows are created (ListView).
+// View modes follow Explorer: 0 extra large icons, 1 large icons, 2 medium icons, 3 small icons,
+// 4 list, 5 details, 6 tiles, 7 content.
+import { ListView } from "std-widgets.slint";
+import { Theme } from "theme.slint";
+import { Icons } from "icons.slint";
+import { FileRow } from "types.slint";
+
+export component FileIcon inherits Rectangle {
+    in property <int> kind;
+    in property <image> thumb;
+    in property <bool> has-thumb;
+    in property <bool> hidden;
+    in property <length> size: 16px;
+    width: size;
+    height: size;
+    opacity: hidden ? 0.55 : 1;
+    if has-thumb && size >= 32px: Rectangle {
+        border-radius: Theme.radius;
+        clip: true;
+        Image {
+            source: thumb;
+            image-fit: contain;
+            width: parent.width;
+            height: parent.height;
+            accessible-role: none;
+        }
+    }
+    if !(has-thumb && size >= 32px): Image {
+        source: Icons.for-kind(kind);
+        colorize: Theme.kind-color(kind);
+        width: size;
+        height: size;
+        accessible-role: none;
+    }
+}
+
+/// Pointer handling shared by rows and cells: left/right press with modifiers, double-click to open.
+component ItemTouch inherits TouchArea {
+    in property <int> index;
+    callback item-down(int, bool, bool, bool, length, length);
+    callback item-activated(int);
+    pointer-event(e) => {
+        if e.kind == PointerEventKind.down && (e.button == PointerEventButton.left || e.button == PointerEventButton.right) {
+            item-down(index, e.modifiers.control, e.modifiers.shift, e.button == PointerEventButton.right,
+                self.absolute-position.x + self.mouse-x, self.absolute-position.y + self.mouse-y);
+        }
+    }
+    double-clicked => { item-activated(index); }
+}
+
+component HeaderCell inherits Rectangle {
+    in property <string> text;
+    in property <int> key;
+    in property <int> sort-key;
+    in property <bool> sort-desc;
+    in property <bool> sortable: true;
+    in property <bool> align-right;
+    callback sort(int);
+    background: touch.has-hover && sortable ? Theme.subtle-hover : transparent;
+    accessible-role: button;
+    accessible-label: text + (key == sort-key ? (sort-desc ? ", sorted descending" : ", sorted ascending") : "");
+    accessible-action-default => { if sortable { sort(key); } }
+    HorizontalLayout {
+        padding-left: 12px;
+        padding-right: 8px;
+        spacing: 4px;
+        if align-right: Rectangle { horizontal-stretch: 1; }
+        Text {
+            text: root.text;
+            color: Theme.text-secondary;
+            font-size: Theme.font-caption;
+            vertical-alignment: center;
+            overflow: elide;
+        }
+        if key == sort-key: Image {
+            source: sort-desc ? Icons.chevron-down : Icons.up;
+            width: 12px;
+            height: 12px;
+            y: (parent.height - 12px) / 2;
+            colorize: Theme.text-secondary;
+            accessible-role: none;
+        }
+        if !align-right: Rectangle { horizontal-stretch: 1; }
+    }
+    touch := TouchArea {
+        enabled: sortable;
+        clicked => { root.sort(root.key); }
+    }
+    Rectangle {
+        x: parent.width - 1px;
+        width: 1px;
+        height: 16px;
+        background: Theme.stroke;
+    }
+}
+
+/// Secondary text cell aligned with its header (12 px in, right-aligned numbers end 8 px in).
+component Cell inherits Rectangle {
+    in property <string> text;
+    in property <bool> align-right;
+    Text {
+        x: align-right ? 0px : 12px;
+        width: parent.width - (align-right ? 8px : 20px);
+        text: root.text;
+        color: Theme.text-secondary;
+        vertical-alignment: center;
+        horizontal-alignment: align-right ? right : left;
+        overflow: elide;
+    }
+}
+
+/// Selection and hover fill shared by rows and cells. Selected items also get an accent bar, so the
+/// state is never shown by colour alone; the focused item gets a ring.
+component ItemBackground inherits Rectangle {
+    in property <bool> selected;
+    in property <bool> hovered;
+    in property <bool> focused;
+    in property <bool> bar: true;
+    border-radius: Theme.radius;
+    background: selected ? (hovered ? Theme.selection-hover : Theme.selection) : hovered ? Theme.subtle-hover : transparent;
+    border-width: focused ? 1px : 0px;
+    border-color: Theme.text-primary;
+    animate background { duration: Theme.fast; }
+    if selected && bar: Rectangle {
+        x: 0;
+        width: 3px;
+        height: min(parent.height - 12px, 16px);
+        border-radius: 1.5px;
+        background: Theme.accent;
+    }
+}
+
+export component DetailsView inherits Rectangle {
+    in property <[FileRow]> rows;
+    in property <bool> search-mode;
+    in property <int> sort-key;
+    in property <bool> sort-desc;
+    in property <int> focus-row;
+    in property <bool> list-focused;
+    callback sort(int);
+    callback item-down(int, bool, bool, bool, length, length);
+    callback item-activated(int);
+    callback background-down(bool, length, length);
+
+    property <length> date-w: 168px;
+    property <length> type-w: 148px;
+    property <length> size-w: 96px;
+    property <length> loc-w: search-mode ? 260px : 0px;
+    property <length> name-w: max(160px, self.width - date-w - type-w - size-w - loc-w - 24px);
+
+    changed focus-row => {
+        if focus-row >= 0 {
+            let top = focus-row * Theme.row-height;
+            if top + lv.content-y < 0 { lv.content-y = -top; }
+            if top + Theme.row-height + lv.content-y > lv.visible-height { lv.content-y = lv.visible-height - top - Theme.row-height; }
+        }
+    }
+
+    VerticalLayout {
+        Rectangle {
+            height: 32px;
+            HorizontalLayout {
+                padding-left: 8px;
+                HeaderCell { width: name-w; text: "Name"; key: 0; sort-key: root.sort-key; sort-desc: root.sort-desc; sort(k) => { root.sort(k); } }
+                if search-mode: HeaderCell { width: loc-w; text: "Folder"; key: -1; sortable: false; }
+                HeaderCell { width: date-w; text: "Date modified"; key: 1; sort-key: root.sort-key; sort-desc: root.sort-desc; sort(k) => { root.sort(k); } }
+                HeaderCell { width: type-w; text: "Type"; key: 2; sort-key: root.sort-key; sort-desc: root.sort-desc; sort(k) => { root.sort(k); } }
+                HeaderCell { width: size-w; text: "Size"; key: 3; align-right: true; sort-key: root.sort-key; sort-desc: root.sort-desc; sort(k) => { root.sort(k); } }
+                Rectangle { }
+            }
+        }
+        Rectangle {
+            bg := TouchArea {
+                pointer-event(e) => {
+                    if e.kind == PointerEventKind.down {
+                        root.background-down(e.button == PointerEventButton.right, self.absolute-position.x + self.mouse-x, self.absolute-position.y + self.mouse-y);
+                    }
+                }
+            }
+            lv := ListView {
+                for row[i] in rows: Rectangle {
+                    height: Theme.row-height;
+                    accessible-role: list-item;
+                    accessible-label: row.name;
+                    accessible-item-selected: row.selected;
+                    accessible-item-index: i;
+                    ItemBackground {
+                        x: 4px;
+                        width: parent.width - 8px;
+                        height: parent.height - 2px;
+                        selected: row.selected;
+                        hovered: touch.has-hover;
+                        focused: root.list-focused && i == root.focus-row;
+                    }
+                    HorizontalLayout {
+                        padding-left: 8px;
+                        Rectangle {
+                            width: name-w;
+                            HorizontalLayout {
+                                padding-left: 12px;
+                                padding-right: 8px;
+                                spacing: 8px;
+                                FileIcon {
+                                    y: (parent.height - 16px) / 2;
+                                    kind: row.kind;
+                                    hidden: row.hidden;
+                                    size: 16px;
+                                }
+                                Text {
+                                    text: row.name;
+                                    color: Theme.text-primary;
+                                    vertical-alignment: center;
+                                    overflow: elide;
+                                    horizontal-stretch: 1;
+                                }
+                            }
+                        }
+                        if search-mode: Cell { width: loc-w; text: row.location; }
+                        Cell { width: date-w; text: row.date; }
+                        Cell { width: type-w; text: row.type-name; }
+                        Cell { width: size-w; text: row.size; align-right: true; }
+                        Rectangle { }
+                    }
+                    touch := ItemTouch {
+                        index: i;
+                        item-down(a, b, c, d, x, y) => { root.item-down(a, b, c, d, x, y); }
+                        item-activated(a) => { root.item-activated(a); }
+                    }
+                }
+            }
+        }
+    }
+}
+
+component GridCell inherits Rectangle {
+    in property <FileRow> item;
+    in property <int> index;
+    in property <int> mode;
+    in property <length> icon;
+    in property <bool> focused;
+    callback item-down(int, bool, bool, bool, length, length);
+    callback item-activated(int);
+    accessible-role: list-item;
+    accessible-label: item.name;
+    accessible-item-selected: item.selected;
+    accessible-item-index: index;
+
+    ItemBackground {
+        x: 2px;
+        y: 2px;
+        width: parent.width - 4px;
+        height: parent.height - 4px;
+        selected: item.selected;
+        hovered: touch.has-hover;
+        focused: root.focused;
+        bar: mode >= 3;
+    }
+    // icons (0, 1, 2): glyph above a two-line name
+    if mode <= 2: VerticalLayout {
+        padding: 8px;
+        spacing: 6px;
+        alignment: start;
+        HorizontalLayout {
+            alignment: center;
+            FileIcon { size: icon; kind: item.kind; thumb: item.thumb; has-thumb: item.has-thumb; hidden: item.hidden; }
+        }
+        Text {
+            text: item.name;
+            color: Theme.text-primary;
+            horizontal-alignment: center;
+            wrap: word-wrap;
+            overflow: elide;
+            max-height: 2 * 19px;
+            font-size: mode == 2 ? Theme.font-caption : Theme.font-body;
+        }
+    }
+    // small icons and list (3, 4)
+    if mode == 3 || mode == 4: HorizontalLayout {
+        padding-left: 12px;
+        padding-right: 8px;
+        spacing: 8px;
+        FileIcon { y: (parent.height - 16px) / 2; size: 16px; kind: item.kind; hidden: item.hidden; }
+        Text {
+            text: item.name;
+            color: Theme.text-primary;
+            vertical-alignment: center;
+            overflow: elide;
+            horizontal-stretch: 1;
+        }
+    }
+    // tiles (6)
+    if mode == 6: HorizontalLayout {
+        padding: 10px;
+        padding-left: 12px;
+        spacing: 12px;
+        FileIcon { y: (parent.height - 48px) / 2; size: 48px; kind: item.kind; thumb: item.thumb; has-thumb: item.has-thumb; hidden: item.hidden; }
+        VerticalLayout {
+            alignment: center;
+            Text { text: item.name; color: Theme.text-primary; overflow: elide; }
+            Text { text: item.type-name; color: Theme.text-secondary; font-size: Theme.font-caption; overflow: elide; }
+            Text { text: item.size; color: Theme.text-secondary; font-size: Theme.font-caption; overflow: elide; }
+        }
+    }
+    // content (7)
+    if mode == 7: HorizontalLayout {
+        padding: 8px;
+        padding-left: 16px;
+        spacing: 16px;
+        FileIcon { y: (parent.height - 48px) / 2; size: 48px; kind: item.kind; thumb: item.thumb; has-thumb: item.has-thumb; hidden: item.hidden; }
+        VerticalLayout {
+            alignment: center;
+            horizontal-stretch: 1;
+            Text { text: item.name; color: Theme.text-primary; overflow: elide; }
+            Text { text: item.location != "" ? item.location : item.type-name; color: Theme.text-secondary; font-size: Theme.font-caption; overflow: elide; }
+        }
+        VerticalLayout {
+            alignment: center;
+            width: 220px;
+            Text { text: item.date != "" ? "Date modified: " + item.date : ""; color: Theme.text-secondary; font-size: Theme.font-caption; overflow: elide; }
+            Text { text: item.kind != 0 ? "Size: " + item.size : ""; color: Theme.text-secondary; font-size: Theme.font-caption; overflow: elide; }
+        }
+    }
+    touch := ItemTouch {
+        index: root.index;
+        item-down(a, b, c, d, x, y) => { root.item-down(a, b, c, d, x, y); }
+        item-activated(a) => { root.item-activated(a); }
+    }
+}
+
+export component GridView inherits Rectangle {
+    in property <[FileRow]> rows;
+    in property <int> mode;
+    in property <int> focus-row;
+    in property <bool> list-focused;
+    callback item-down(int, bool, bool, bool, length, length);
+    callback item-activated(int);
+    callback background-down(bool, length, length);
+
+    property <length> cell-w: mode == 0 ? 224px : mode == 1 ? 128px : mode == 2 ? 92px : mode == 6 ? 280px : mode == 7 ? max(200px, self.width - 24px) : 260px;
+    property <length> cell-h: mode == 0 ? 268px : mode == 1 ? 164px : mode == 2 ? 112px : mode == 6 ? 76px : mode == 7 ? 68px : Theme.row-height;
+    property <length> icon: mode == 0 ? 192px : mode == 1 ? 96px : mode == 2 ? 48px : 16px;
+    out property <int> cols: max(1, floor((self.width - 24px) / cell-w));
+    property <int> line-count: ceil(rows.length / cols);
+
+    changed focus-row => {
+        if focus-row >= 0 {
+            let top = floor(focus-row / cols) * cell-h;
+            if top + lv.content-y < 0 { lv.content-y = -top; }
+            if top + cell-h + lv.content-y > lv.visible-height { lv.content-y = lv.visible-height - top - cell-h; }
+        }
+    }
+
+    TouchArea {
+        pointer-event(e) => {
+            if e.kind == PointerEventKind.down {
+                root.background-down(e.button == PointerEventButton.right, self.absolute-position.x + self.mouse-x, self.absolute-position.y + self.mouse-y);
+            }
+        }
+    }
+    lv := ListView {
+        for line in line-count: Rectangle {
+            height: cell-h;
+            for c in cols: GridCell {
+                x: 12px + c * cell-w;
+                width: cell-w;
+                height: cell-h;
+                index: line * root.cols + c;
+                visible: self.index < rows.length;
+                item: rows[self.index];
+                mode: root.mode;
+                icon: root.icon;
+                focused: root.list-focused && self.index == root.focus-row;
+                item-down(i, ctl, sh, rt, x, y) => { root.item-down(i, ctl, sh, rt, x, y); }
+                item-activated(a) => { root.item-activated(a); }
+            }
+        }
+    }
+}

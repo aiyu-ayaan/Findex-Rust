@@ -1,0 +1,340 @@
+// Window chrome: tab strip merged with the title bar, command bar, address row.
+import { Theme } from "theme.slint";
+import { Icons } from "icons.slint";
+import { IconButton, CommandButton, VDivider, TextField, FocusRing } from "controls.slint";
+import { TabData, Crumb } from "types.slint";
+
+component CaptionButton inherits Rectangle {
+    in property <image> icon;
+    in property <string> label;
+    in property <bool> is-close;
+    callback clicked;
+    width: 46px;
+    background: touch.pressed ? (is-close ? #c42b1ce6 : Theme.subtle-pressed) : touch.has-hover ? (is-close ? #c42b1c : Theme.subtle-hover) : transparent;
+    animate background { duration: Theme.fast; }
+    accessible-role: button;
+    accessible-label: label;
+    accessible-action-default => { clicked(); }
+    Image {
+        source: icon;
+        width: 16px;
+        height: 16px;
+        colorize: is-close && touch.has-hover ? #ffffff : Theme.text-primary;
+        accessible-role: none;
+    }
+    touch := TouchArea { clicked => { root.clicked(); } }
+}
+
+component Tab inherits Rectangle {
+    in property <string> title;
+    in property <bool> selected;
+    in property <bool> show-separator;
+    callback select;
+    callback close;
+    height: 32px;
+    accessible-role: tab;
+    accessible-label: title;
+    accessible-item-selected: selected;
+    accessible-action-default => { select(); }
+
+    Rectangle {
+        border-top-left-radius: Theme.radius-overlay;
+        border-top-right-radius: Theme.radius-overlay;
+        background: selected ? Theme.layer-alt : touch.has-hover ? Theme.subtle-hover : transparent;
+        animate background { duration: Theme.fast; }
+    }
+    if show-separator && !selected: Rectangle {
+        x: parent.width - 1px;
+        width: 1px;
+        height: 16px;
+        background: Theme.stroke-strong;
+    }
+    touch := TouchArea {
+        pointer-event(e) => {
+            if e.kind == PointerEventKind.down && e.button == PointerEventButton.left { root.select(); }
+            if e.kind == PointerEventKind.up && e.button == PointerEventButton.middle { root.close(); }
+        }
+    }
+    HorizontalLayout {
+        padding-left: 12px;
+        padding-right: 6px;
+        spacing: 8px;
+        Image {
+            source: Icons.folder-filled;
+            colorize: Theme.kind-color(0);
+            width: 16px;
+            height: 16px;
+            y: (parent.height - 16px) / 2;
+            accessible-role: none;
+        }
+        Text {
+            text: title;
+            color: Theme.text-primary;
+            font-size: Theme.font-caption;
+            vertical-alignment: center;
+            overflow: elide;
+            horizontal-stretch: 1;
+        }
+        IconButton {
+            width: 24px;
+            height: 24px;
+            y: (parent.height - 24px) / 2;
+            icon: Icons.dismiss;
+            icon-size: 12px;
+            label: "Close tab";
+            opacity: selected || touch.has-hover ? 1 : 0;
+            clicked => { root.close(); }
+        }
+    }
+}
+
+export component TabStrip inherits Rectangle {
+    in property <[TabData]> tabs;
+    in property <int> active;
+    callback select(int);
+    callback close(int);
+    callback new-tab();
+    callback minimize();
+    callback toggle-maximize();
+    callback close-window();
+    height: Theme.tab-strip-height;
+    accessible-role: tab-list;
+
+    property <length> tab-w: clamp((self.width - 8px - 40px - 3 * 46px - 48px) / max(1, tabs.length), 96px, 240px);
+
+    // Empty strip space drags the window.
+    WindowMoveArea { }
+    HorizontalLayout {
+        padding-left: 8px;
+        Rectangle {
+            width: tabs.length * tab-w + 40px;
+            for tab[i] in tabs: Tab {
+                x: i * tab-w;
+                y: parent.height - self.height;
+                width: tab-w;
+                title: tab.title;
+                selected: i == active;
+                show-separator: i != active - 1;
+                select => { root.select(i); }
+                close => { root.close(i); }
+            }
+            IconButton {
+                x: tabs.length * tab-w + 4px;
+                y: (parent.height - 32px) / 2 + 3px;
+                icon: Icons.add;
+                label: "New tab";
+                clicked => { root.new-tab(); }
+            }
+        }
+        Rectangle { horizontal-stretch: 1; }
+        CaptionButton { icon: Icons.minimize; label: "Minimize"; clicked => { root.minimize(); } }
+        CaptionButton { icon: Theme.maximized ? Icons.restore : Icons.maximize; label: Theme.maximized ? "Restore" : "Maximize"; clicked => { root.toggle-maximize(); } }
+        CaptionButton { icon: Icons.dismiss; label: "Close"; is-close: true; clicked => { root.close-window(); } }
+    }
+}
+
+export component CommandBar inherits Rectangle {
+    in property <bool> has-selection;
+    in property <bool> single-selection;
+    in property <bool> can-paste;
+    in property <bool> in-folder;
+    in property <bool> details-pane;
+    callback new-menu(length, length);
+    callback cut();
+    callback copy();
+    callback paste();
+    callback rename();
+    callback delete();
+    callback sort-menu(length, length);
+    callback view-menu(length, length);
+    callback toggle-details();
+    callback more-menu(length, length);
+    height: Theme.command-bar-height;
+
+    property <bool> labels: self.width > 860px;
+
+    HorizontalLayout {
+        padding-left: 12px;
+        padding-right: 12px;
+        spacing: 4px;
+        alignment: start;
+        new-btn := CommandButton {
+            y: (parent.height - 32px) / 2;
+            icon: Icons.add;
+            text: "New";
+            enabled: in-folder;
+            clicked => { root.new-menu(self.absolute-position.x, self.absolute-position.y + self.height + 4px); }
+        }
+        VDivider { y: (parent.height - 24px) / 2; }
+        CommandButton { y: (parent.height - 32px) / 2; icon: Icons.cut; text: "Cut"; show-text: false; enabled: has-selection; clicked => { root.cut(); } }
+        CommandButton { y: (parent.height - 32px) / 2; icon: Icons.copy; text: "Copy"; show-text: false; enabled: has-selection; clicked => { root.copy(); } }
+        CommandButton { y: (parent.height - 32px) / 2; icon: Icons.paste; text: "Paste"; show-text: false; enabled: can-paste && in-folder; clicked => { root.paste(); } }
+        CommandButton { y: (parent.height - 32px) / 2; icon: Icons.rename; text: "Rename"; show-text: false; enabled: single-selection; clicked => { root.rename(); } }
+        CommandButton { y: (parent.height - 32px) / 2; icon: Icons.delete; text: "Delete"; show-text: false; enabled: has-selection; clicked => { root.delete(); } }
+        VDivider { y: (parent.height - 24px) / 2; }
+        CommandButton {
+            y: (parent.height - 32px) / 2;
+            icon: Icons.sort;
+            text: "Sort";
+            show-text: labels;
+            clicked => { root.sort-menu(self.absolute-position.x, self.absolute-position.y + self.height + 4px); }
+        }
+        CommandButton {
+            y: (parent.height - 32px) / 2;
+            icon: Icons.view-details;
+            text: "View";
+            show-text: labels;
+            clicked => { root.view-menu(self.absolute-position.x, self.absolute-position.y + self.height + 4px); }
+        }
+        Rectangle { horizontal-stretch: 1; }
+        CommandButton {
+            y: (parent.height - 32px) / 2;
+            icon: Icons.details-pane;
+            text: "Details";
+            show-text: labels;
+            checked: details-pane;
+            clicked => { root.toggle-details(); }
+        }
+        CommandButton {
+            y: (parent.height - 32px) / 2;
+            icon: Icons.more;
+            text: "See more";
+            show-text: false;
+            clicked => { root.more-menu(self.absolute-position.x + self.width - 260px, self.absolute-position.y + self.height + 4px); }
+        }
+    }
+}
+
+component CrumbButton inherits Rectangle {
+    in property <string> label;
+    in property <bool> first;
+    callback clicked;
+    height: 28px;
+    width: row.preferred-width;
+    border-radius: Theme.radius;
+    background: touch.has-hover ? Theme.subtle-hover : transparent;
+    accessible-role: button;
+    accessible-label: label;
+    accessible-action-default => { clicked(); }
+    row := HorizontalLayout {
+        padding-left: first ? 4px : 2px;
+        padding-right: 6px;
+        spacing: 4px;
+        if !first: Image {
+            source: Icons.chevron-right;
+            width: 12px;
+            height: 12px;
+            y: (parent.height - 12px) / 2;
+            colorize: Theme.text-secondary;
+            accessible-role: none;
+        }
+        Text {
+            text: label;
+            color: Theme.text-primary;
+            vertical-alignment: center;
+        }
+    }
+    touch := TouchArea {
+        mouse-cursor: pointer;
+        clicked => { root.clicked(); }
+    }
+}
+
+export component AddressBar inherits Rectangle {
+    in property <[Crumb]> crumbs;
+    in property <bool> can-back;
+    in property <bool> can-forward;
+    in property <bool> can-up;
+    in property <string> path-text;
+    in property <string> search-placeholder;
+    in-out property <string> search-text;
+    in-out property <bool> editing;
+    callback back();
+    callback forward();
+    callback up();
+    callback refresh();
+    callback navigate(string);
+    callback path-submitted(string);
+    callback search-edited(string);
+    callback search-submitted(string);
+    callback search-cleared();
+    height: Theme.address-height + 8px;
+
+    public function edit-path() {
+        editing = true;
+        path-field.text = path-text;
+        path-field.focus-input();
+        path-field.select-all();
+    }
+    public function focus-search() {
+        search.focus-input();
+        search.select-all();
+    }
+
+    HorizontalLayout {
+        padding-left: 8px;
+        padding-right: 12px;
+        padding-top: 4px;
+        padding-bottom: 4px;
+        spacing: 4px;
+        IconButton { icon: Icons.back; label: "Back (Alt+Left)"; enabled: can-back; clicked => { root.back(); } }
+        IconButton { icon: Icons.forward; label: "Forward (Alt+Right)"; enabled: can-forward; clicked => { root.forward(); } }
+        IconButton { icon: Icons.up; label: "Up to parent folder (Alt+Up)"; enabled: can-up; clicked => { root.up(); } }
+        IconButton { icon: Icons.refresh; label: "Refresh (F5)"; clicked => { root.refresh(); } }
+        Rectangle { width: 4px; }
+        Rectangle {
+            horizontal-stretch: 1;
+            height: 32px;
+            if !editing: Rectangle {
+                border-radius: Theme.radius;
+                background: Theme.control;
+                border-width: 1px;
+                border-color: Theme.stroke;
+                clip: true;
+                accessible-role: list;
+                accessible-label: "Address: " + path-text;
+                TouchArea {
+                    mouse-cursor: MouseCursor.text;
+                    clicked => { root.edit-path(); }
+                }
+                HorizontalLayout {
+                    padding-left: 8px;
+                    spacing: 2px;
+                    alignment: start;
+                    Image {
+                        source: crumbs.length == 0 ? Icons.pc : Icons.folder-filled;
+                        colorize: crumbs.length == 0 ? Theme.text-primary : Theme.kind-color(0);
+                        width: 16px;
+                        height: 16px;
+                        y: (parent.height - 16px) / 2;
+                        accessible-role: none;
+                    }
+                    for c[i] in crumbs: CrumbButton {
+                        y: (parent.height - 28px) / 2;
+                        label: c.label;
+                        first: i == 0;
+                        clicked => { root.navigate(c.path); }
+                    }
+                }
+            }
+            path-field := TextField {
+                visible: editing;
+                placeholder: "Type a path";
+                accepted(t) => { root.editing = false; root.path-submitted(t); }
+                escape => { root.editing = false; root.path-submitted(""); }
+                changed has-focus => { if !self.has-focus { root.editing = false; } }
+            }
+        }
+        Rectangle { width: 4px; }
+        search := TextField {
+            width: clamp(root.width * 0.25, 180px, 320px);
+            text <=> root.search-text;
+            placeholder: root.search-placeholder;
+            has-icon: true;
+            icon: Icons.search;
+            edited(t) => { root.search-edited(t); }
+            accepted(t) => { root.search-submitted(t); }
+            escape => { root.search-text = ""; root.search-cleared(); }
+        }
+    }
+}

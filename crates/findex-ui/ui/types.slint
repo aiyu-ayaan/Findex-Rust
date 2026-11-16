@@ -1,0 +1,73 @@
+// Data passed between Rust and the UI.
+
+export struct FileRow {
+    name: string,
+    /// findex_core::Kind
+    kind: int,
+    type-name: string,
+    size: string,
+    date: string,
+    /// Containing folder, shown for search results.
+    location: string,
+    selected: bool,
+    hidden: bool,
+    thumb: image,
+    has-thumb: bool,
+}
+
+export struct TabData {
+    title: string,
+    tooltip: string,
+}
+
+export struct Crumb {
+    label: string,
+    path: string,
+}
+
+/// Navigation pane row. kind: 0 place, 1 drive, 2 section header, 3 This PC
+export struct NavItem {
+    label: string,
+    icon: string,
+    kind: int,
+    current: bool,
+}
+
+/// kind: 0 fixed, 1 removable, 2 network, 3 optical, 4 unmounted
+export struct DriveData {
+    label: string,
+    kind: int,
+    usage: float,
+    detail: string,
+    low-space: bool,
+    can-eject: bool,
+}
+
+/// state: 0 queued, 1 running, 2 paused, 3 done, 4 failed, 5 cancelled
+export struct JobData {
+    id: int,
+    title: string,
+    detail: string,
+    progress: float,
+    state: int,
+    /// Area chart of speed over progress, in the graph's own 472 x 96 pixel space.
+    graph: string,
+    /// Current speed as a fraction of the graph height (0..1), for the speed line.
+    speed-level: float,
+    speed: string,
+    name: string,
+    time-left: string,
+    items-left: string,
+}
+
+export struct Details {
+    name: string,
+    kind: int,
+    type-name: string,
+    size: string,
+    date: string,
+    location: string,
+    thumb: image,
+    has-thumb: bool,
+    count: int,
+}

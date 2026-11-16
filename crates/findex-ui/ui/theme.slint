@@ -1,0 +1,91 @@
+// Design tokens (docs/07-ui-design-language.md). Components use these only, never raw colours.
+// Values marked ~ in the design doc are approximations of Windows 11 / WinUI 3.
+import { Palette } from "std-widgets.slint";
+
+export global Theme {
+    // ---- mode ----
+    out property <bool> dark: Palette.color-scheme == ColorScheme.dark;
+    /// "Transparency effects" setting.
+    in-out property <bool> transparency: true;
+    /// True when the OS draws a real backdrop (Mica on Windows 11) behind the window.
+    in-out property <bool> system-backdrop: false;
+    in-out property <bool> reduce-motion: false;
+    in-out property <bool> compact: false;
+    in-out property <bool> maximized: false;
+
+    // ---- surfaces ----
+    // Mica stand-in. Translucent when transparency is on; fully clear when the OS provides Mica.
+    out property <color> mica: system-backdrop && transparency ? (dark ? #20202040 : #f3f3f340)
+        : transparency ? (dark ? #1c1c1ce0 : #eeeeeee0)
+        : (dark ? #202020 : #f3f3f3);
+    // Layer that holds content, semi-transparent over Mica (LayerFillColorDefault).
+    out property <color> layer: transparency ? (dark ? #2b2b2bc8 : #fbfbfbd0) : (dark ? #2b2b2b : #ffffff);
+    // Command bar / selected tab layer.
+    out property <color> layer-alt: transparency ? (dark ? #323232b0 : #ffffffb0) : (dark ? #2f2f2f : #f9f9f9);
+    // Acrylic stand-in for flyouts and menus (in-app acrylic, near-opaque so text stays legible).
+    out property <color> acrylic: dark ? #2c2c2cf5 : #f9f9f9f5;
+    out property <color> dialog: dark ? #2b2b2b : #ffffff;
+    out property <color> smoke: dark ? #0000007a : #0000004d;
+    out property <color> control: dark ? #ffffff0f : #ffffffb3;
+    out property <color> control-hover: dark ? #ffffff15 : #f9f9f980;
+    out property <color> subtle-hover: dark ? #ffffff0f : #0000000a;
+    out property <color> subtle-pressed: dark ? #ffffff0a : #00000006;
+
+    // ---- strokes ----
+    out property <color> stroke: dark ? #ffffff14 : #0000000f;
+    out property <color> stroke-strong: dark ? #ffffff24 : #00000024;
+    out property <color> stroke-window: dark ? #ffffff1f : #0000001f;
+
+    // ---- text ----
+    out property <color> text-primary: dark ? #ffffff : #1a1a1a;
+    out property <color> text-secondary: dark ? #c5c5c5 : #5c5c5c;
+    out property <color> text-disabled: dark ? #ffffff5d : #00000072;
+
+    // ---- accent and status ----
+    in-out property <color> accent: dark ? #60cdff : #0067c0;
+    out property <color> accent-hover: dark ? #5bbbe8 : #1975c5;
+    out property <color> on-accent: dark ? #000000 : #ffffff;
+    out property <color> selection: dark ? #60cdff33 : #0067c026;
+    out property <color> selection-hover: dark ? #60cdff40 : #0067c033;
+    out property <color> danger: dark ? #ff99a4 : #c42b1c;
+    out property <color> warning: dark ? #fce100 : #9d5d00;
+    out property <color> success: dark ? #6ccb5f : #0f7b0f;
+
+    // ---- typography ----
+    out property <length> font-caption: 12px;
+    out property <length> font-body: 14px;
+    out property <length> font-subtitle: 20px;
+    out property <length> font-title: 28px;
+
+    // ---- metrics (4 px grid) ----
+    out property <length> row-height: compact ? 24px : 32px;
+    out property <length> tab-strip-height: 40px;
+    out property <length> command-bar-height: 48px;
+    out property <length> address-height: 40px;
+    out property <length> nav-width: 240px;
+    out property <length> details-width: 320px;
+    out property <length> status-height: 28px;
+    out property <length> radius: 4px;
+    out property <length> radius-overlay: 8px;
+    out property <length> window-radius: maximized ? 0px : 8px;
+
+    // ---- motion ----
+    out property <duration> fast: reduce-motion ? 0ms : 100ms;
+    out property <duration> base: reduce-motion ? 0ms : 167ms;
+    out property <duration> slow: reduce-motion ? 0ms : 250ms;
+    /// Progress tweening: a little longer than the 100 ms update tick, linear, so bars glide continuously.
+    out property <duration> progress-tick: reduce-motion ? 0ms : 120ms;
+
+    /// Icon tint per file kind (findex_core::Kind). Always paired with a glyph, never colour alone.
+    public pure function kind-color(kind: int) -> color {
+        if kind == 0 { return dark ? #ffc83d : #e8a600; }
+        if kind == 2 { return dark ? #b4a0ff : #8764b8; }
+        if kind == 3 { return dark ? #ff99a4 : #c42b1c; }
+        if kind == 4 { return dark ? #4cc2c4 : #038387; }
+        if kind == 5 { return dark ? #60cdff : #0067c0; }
+        if kind == 6 { return dark ? #ff9f7a : #d83b01; }
+        if kind == 7 { return dark ? #d3a27c : #8e562e; }
+        if kind == 8 { return dark ? #6ccb5f : #0f7b0f; }
+        return text-secondary;
+    }
+}
