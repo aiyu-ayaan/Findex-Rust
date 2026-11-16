@@ -134,17 +134,29 @@ pub fn drives() -> Vec<Drive> {
         } else {
             continue;
         };
-        let label = udev_props(&m.majmin)
+        let (total, free) = space(m.mount_point.clone());
+        let mut props = udev_props(&m.majmin);
+        let label = props
             .remove("ID_FS_LABEL")
             .filter(|l| !l.is_empty())
-            .unwrap_or_else(|| match m.mount_point.to_str() {
-                Some("/") => "File System".into(),
+            .or_else(|| {
+                // A removable disk's model is a useful name ("SanDisk_Ultra"); an internal disk's is shared by all its partitions.
+                (kind == DriveKind::Removable)
+                    .then(|| props.remove("ID_MODEL"))
+                    .flatten()
+                    .map(|s| s.replace('_', " "))
+                    .filter(|l| !l.is_empty())
+            })
+            .unwrap_or_else(|| match (m.mount_point.to_str(), kind) {
+                (Some("/"), _) => "File System".into(),
+                (_, DriveKind::Fixed | DriveKind::Removable) if total > 0 => {
+                    format!("Local Disk ({})", findex_core::format::size(total))
+                }
                 _ => m
                     .mount_point
                     .file_name()
                     .map_or(m.source.clone(), |n| n.to_string_lossy().into_owned()),
             });
-        let (total, free) = space(m.mount_point.clone());
         out.push(Drive {
             label: format!("{label} ({})", m.mount_point.display()),
             path: m.mount_point.clone(),
@@ -218,9 +230,9 @@ fn unmounted(mounted: &HashSet<String>) -> Vec<Drive> {
             .get("ID_FS_LABEL")
             .filter(|l| !l.is_empty())
             .cloned()
-            .unwrap_or_else(|| name.clone());
+            .unwrap_or_else(|| format!("Local Disk ({})", findex_core::format::size(total)));
         v.push(Drive {
-            label: format!("{label} (not mounted)"),
+            label,
             path: PathBuf::new(),
             device: Some(format!("/dev/{name}")),
             kind: DriveKind::Unmounted,
