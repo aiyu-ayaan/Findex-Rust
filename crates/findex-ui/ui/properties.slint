@@ -1,0 +1,119 @@
+// Properties window, opened from the context menu. Shows what Explorer's General tab shows,
+// plus the Hidden attribute toggle.
+import { CheckBox } from "std-widgets.slint";
+import { Theme } from "theme.slint";
+import { Icons } from "icons.slint";
+import { DialogButton, HDivider } from "controls.slint";
+import { FileIcon } from "fileviews.slint";
+import { Details } from "types.slint";
+
+component Line inherits HorizontalLayout {
+    in property <string> label;
+    in property <string> value;
+    spacing: 12px;
+    visible: value != "";
+    Text { width: 112px; text: label; color: Theme.text-secondary; font-size: Theme.font-caption; }
+    Text { text: value; color: Theme.text-primary; font-size: Theme.font-caption; wrap: word-wrap; horizontal-stretch: 1; }
+}
+
+export component PropertiesWindow inherits Window {
+    title: "Properties";
+    icon: Icons.info;
+    no-frame: true;
+    background: transparent;
+    default-font-family: "Inter";
+    default-font-size: Theme.font-body;
+    width: 420px;
+    height: 440px;
+
+    in property <Details> details;
+    in property <bool> hidden;
+    /// False when the target cannot be hidden (the open folder itself, search results).
+    in property <bool> can-hide: true;
+    callback set-hidden(bool);
+    callback close-requested();
+
+    FocusScope {
+        init => { self.focus(); }
+        key-pressed(e) => {
+            if e.text == Key.Escape { root.close-requested(); return accept; }
+            reject
+        }
+    }
+    Rectangle {
+        background: Theme.mica;
+        border-radius: Theme.radius-overlay;
+        border-width: 1px;
+        border-color: Theme.stroke-window;
+        clip: true;
+        VerticalLayout {
+            Rectangle {
+                height: 44px;
+                WindowMoveArea { }
+                HorizontalLayout {
+                    padding-left: 16px;
+                    spacing: 12px;
+                    Image { source: Icons.info; width: 16px; height: 16px; y: (parent.height - 16px) / 2; colorize: Theme.text-primary; accessible-role: none; }
+                    Text { text: details.count == 1 ? details.name + " Properties" : "Properties"; color: Theme.text-primary; vertical-alignment: center; overflow: elide; horizontal-stretch: 1; }
+                    Rectangle {
+                        width: 46px;
+                        background: ct.has-hover ? #c42b1c : transparent;
+                        accessible-role: button;
+                        accessible-label: "Close";
+                        accessible-action-default => { root.close-requested(); }
+                        Image { source: Icons.dismiss; width: 16px; height: 16px; colorize: ct.has-hover ? #ffffff : Theme.text-primary; accessible-role: none; }
+                        ct := TouchArea { clicked => { root.close-requested(); } }
+                    }
+                }
+            }
+            Rectangle {
+                vertical-stretch: 1;
+                background: Theme.layer;
+                border-width: 1px;
+                border-color: Theme.stroke;
+                VerticalLayout {
+                    padding: 20px;
+                    spacing: 12px;
+                    alignment: start;
+                    HorizontalLayout {
+                        spacing: 16px;
+                        FileIcon { size: 64px; kind: details.count == 1 ? details.kind : 1; thumb: details.thumb; has-thumb: details.has-thumb && details.count == 1; }
+                        VerticalLayout {
+                            alignment: center;
+                            spacing: 4px;
+                            Text {
+                                text: details.count == 1 ? details.name : details.count + " items";
+                                color: Theme.text-primary;
+                                font-size: Theme.font-subtitle;
+                                font-weight: 600;
+                                wrap: word-wrap;
+                            }
+                            if details.count == 1: Text { text: details.type-name; color: Theme.text-secondary; }
+                        }
+                    }
+                    HDivider { }
+                    Line { label: "Location"; value: details.location; }
+                    Line { label: "Size"; value: details.size; }
+                    Line { label: "Modified"; value: details.count == 1 ? details.date : ""; }
+                    HDivider { }
+                    Text { text: "Attributes"; color: Theme.text-primary; font-weight: 600; }
+                    CheckBox {
+                        text: "Hidden";
+                        checked: root.hidden;
+                        enabled: root.can-hide;
+                        accessible-label: "Hidden";
+                        toggled => { root.set-hidden(self.checked); }
+                    }
+                }
+            }
+            Rectangle {
+                height: 56px;
+                HorizontalLayout {
+                    padding: 12px;
+                    alignment: end;
+                    DialogButton { text: "Close"; primary: true; clicked => { root.close-requested(); } }
+                }
+            }
+        }
+    }
+}

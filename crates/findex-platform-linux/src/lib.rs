@@ -49,6 +49,36 @@ pub fn open_default(path: &Path) -> std::io::Result<()> {
         .map(|_| ())
 }
 
+/// Hides or unhides a file. Linux has no hidden attribute, so this adds or removes the leading dot.
+/// Returns the new path.
+pub fn set_hidden(path: &Path, hidden: bool) -> std::io::Result<PathBuf> {
+    use std::os::unix::ffi::{OsStrExt, OsStringExt};
+    let name = path.file_name().unwrap_or_default().as_bytes();
+    let new: Vec<u8> = if hidden {
+        if name.starts_with(b".") {
+            return Ok(path.to_path_buf());
+        }
+        [b".", name].concat()
+    } else {
+        let t = name.strip_prefix(b".").unwrap_or(name);
+        if t.is_empty() || t == b"." {
+            return Ok(path.to_path_buf());
+        }
+        t.to_vec()
+    };
+    let to = path.with_file_name(std::ffi::OsString::from_vec(new));
+    if to == path {
+        return Ok(to);
+    }
+    if std::fs::symlink_metadata(&to).is_ok() {
+        return Err(std::io::Error::other(format!(
+            "There is already a file named '{}' here.",
+            to.file_name().unwrap_or_default().to_string_lossy()
+        )));
+    }
+    std::fs::rename(path, &to).map(|_| to)
+}
+
 /// Native window backdrop (Mica). Not available on Linux; the UI draws its own translucency.
 pub fn apply_window_effects(_handle: raw_window_handle::RawWindowHandle, _dark: bool) -> bool {
     false

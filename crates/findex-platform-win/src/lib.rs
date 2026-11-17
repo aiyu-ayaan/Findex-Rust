@@ -266,6 +266,26 @@ pub fn open_default(path: &Path) -> io::Result<()> {
     }
 }
 
+/// Sets or clears the Hidden attribute. Returns the (unchanged) path.
+pub fn set_hidden(path: &Path, hidden: bool) -> io::Result<PathBuf> {
+    let w = wide(path.as_os_str());
+    unsafe {
+        let a = GetFileAttributesW(w.as_ptr());
+        if a == INVALID_FILE_ATTRIBUTES {
+            return Err(io::Error::last_os_error());
+        }
+        let n = if hidden {
+            a | FILE_ATTRIBUTE_HIDDEN
+        } else {
+            a & !FILE_ATTRIBUTE_HIDDEN
+        };
+        if n != a && SetFileAttributesW(w.as_ptr(), n) == 0 {
+            return Err(io::Error::last_os_error());
+        }
+    }
+    Ok(path.to_path_buf())
+}
+
 /// Windows 11 Mica backdrop plus dark title chrome. Returns false where unsupported (Windows 10).
 /// [?] verify on Windows 11 22H2+ that Slint's transparent surface shows the backdrop (spike S1).
 pub fn apply_window_effects(handle: raw_window_handle::RawWindowHandle, dark: bool) -> bool {

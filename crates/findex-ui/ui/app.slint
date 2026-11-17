@@ -11,8 +11,9 @@ import { NavPane, StatusBar, DetailsPane, ThisPcPage } from "panes.slint";
 import { Dialog, Toast } from "overlays.slint";
 import { TransferWindow } from "transfer.slint";
 import { OptionsWindow, Options } from "options.slint";
+import { PropertiesWindow } from "properties.slint";
 
-export { TransferWindow, OptionsWindow, Options, Theme, Palette, FileRow, TabData, Crumb, NavItem, DriveData, JobData, Details }
+export { TransferWindow, OptionsWindow, PropertiesWindow, Options, Theme, Palette, FileRow, TabData, Crumb, NavItem, DriveData, JobData, Details }
 
 component CheckRow inherits MenuRow {
     in property <bool> checked;
@@ -128,6 +129,7 @@ export component AppWindow inherits Window {
     callback window-changed();
     callback show-transfers();
     callback show-options();
+    callback show-properties();
 
     // ---- functions Rust calls ----
     public function show-rename(name: string) {
@@ -482,7 +484,7 @@ export component AppWindow inherits Window {
                 if root.menu-on-item && root.in-trash: MenuRow { icon: Icons.undo; text: "Restore"; clicked => { root.restore-items(); } }
                 if root.menu-on-item: MenuRow { icon: Icons.add; text: "Open in new tab"; enabled: root.details.kind == 0; clicked => { root.open-in-new-tab(); } }
                 if root.menu-on-item: MenuRow { icon: Icons.copy; text: "Copy as path"; shortcut: "Ctrl+Shift+C"; clicked => { root.copy-path(); } }
-                if root.menu-on-item: MenuRow { icon: Icons.info; text: "Properties"; clicked => { root.details-pane = true; } }
+                if root.menu-on-item: MenuRow { icon: Icons.info; text: "Properties"; clicked => { root.show-properties(); } }
                 if root.menu-on-item: HDivider { }
                 if root.menu-on-item: MenuRow { icon: Icons.delete; text: "Delete permanently"; shortcut: "Shift+Del"; danger: true; clicked => { root.delete-items(true); } }
                 if !root.menu-on-item: MenuRow { icon: Icons.view-details; text: "View"; clicked => { root.pop-x = root.menu-x; root.pop-y = root.menu-y; view-popup.show(); } }
@@ -494,7 +496,7 @@ export component AppWindow inherits Window {
                 if !root.menu-on-item: MenuRow { icon: Icons.new-file; text: "New text document"; enabled: !root.this-pc && !root.search-mode; clicked => { root.new-file(); } }
                 if !root.menu-on-item: MenuRow { icon: Icons.check; text: "Select all"; shortcut: "Ctrl+A"; clicked => { root.select-all(); } }
                 if !root.menu-on-item: HDivider { }
-                if !root.menu-on-item: MenuRow { icon: Icons.info; text: "Properties"; clicked => { root.details-pane = true; } }
+                if !root.menu-on-item: MenuRow { icon: Icons.info; text: "Properties"; clicked => { root.show-properties(); } }
             }
         }
     }

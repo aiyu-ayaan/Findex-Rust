@@ -93,6 +93,9 @@ struct JobStats {
 pub struct App {
     ui: AppWindow,
     transfer: TransferWindow,
+    props: PropertiesWindow,
+    /// Paths the Properties window acts on.
+    props_targets: Vec<PathBuf>,
     /// The transfer window was opened automatically (it then closes itself when everything is done).
     transfer_auto: bool,
     tabs: Vec<Tab>,
@@ -160,6 +163,9 @@ pub fn start(ui: AppWindow, start: Option<PathBuf>) {
     options.on_unhide_drive(|i| with_app(|app| app.unhide_drive(i as usize)));
     options.on_toggle_default_fm(|| with_app(|app| app.toggle_default_fm()));
     options.on_close_requested(|| with_app(|app| drop(app.options.hide())));
+    let props = PropertiesWindow::new().expect("create properties window");
+    props.on_close_requested(|| with_app(|app| drop(app.props.hide())));
+    props.on_set_hidden(|h| with_app(|app| app.props_set_hidden(h)));
     let transfer = TransferWindow::new().expect("create transfer window");
     transfer.set_jobs(ModelRc::from(jobs_model.clone()));
     transfer.on_pause(|id| with_app(|app| app.job_pause(id as u64)));
@@ -174,6 +180,8 @@ pub fn start(ui: AppWindow, start: Option<PathBuf>) {
     let mut app = App {
         ui: ui.clone_strong(),
         transfer,
+        props,
+        props_targets: Vec::new(),
         transfer_auto: false,
         tabs: Vec::new(),
         active: 0,
@@ -308,7 +316,8 @@ fn wire(ui: &AppWindow) {
         app.new_tab(p)
     });
     on!(on_close_tab, |app, i| app.close_tab(i as usize));
-    on!(on_reorder_tab, |app, from, to| app.reorder_tab(from as usize, to as usize));
+    on!(on_reorder_tab, |app, from, to| app
+        .reorder_tab(from as usize, to as usize));
     on!(on_select_tab, |app, i| app.switch_tab(i as usize));
     on!(on_item_down, |app, i, ctrl, shift, right| app
         .item_down(i as usize, ctrl, shift, right));
@@ -381,6 +390,7 @@ fn wire(ui: &AppWindow) {
     on!(on_window_changed, |_app| {});
     on!(on_show_transfers, |app| app.show_transfers(false));
     on!(on_show_options, |app| app.show_options());
+    on!(on_show_properties, |app| app.show_properties());
     ui.on_key(move |text, ctrl, shift, alt, typing| {
         let mut handled = false;
         with_app(|app| handled = app.key(&text, ctrl, shift, alt, typing));
@@ -408,6 +418,7 @@ impl App {
         for theme in [
             self.ui.global::<Theme>(),
             self.transfer.global::<Theme>(),
+            self.props.global::<Theme>(),
             self.options.global::<Theme>(),
         ] {
             theme.set_transparency(s.transparency);
@@ -497,6 +508,7 @@ impl App {
         };
         self.ui.global::<Palette>().set_color_scheme(scheme);
         self.transfer.global::<Palette>().set_color_scheme(scheme);
+        self.props.global::<Palette>().set_color_scheme(scheme);
         self.options.global::<Palette>().set_color_scheme(scheme);
     }
 
@@ -514,6 +526,85 @@ impl App {
     /// Called once the native window exists: ask the OS for a Mica backdrop (Windows 11).
     pub fn apply_window_effects(&mut self) {
         apply_effects(self.ui.window(), &self.ui.global::<Theme>());
+    }
+
+    // ---------------- properties window ----------------
+
+    /// Opens Properties for the selection, or for the open folder when nothing is selected.
+    fn show_properties(&mut self) {
+        let sel = self.tab().model.selected_entries();
+        let mut hidden = false;
+        let mut can_hide = self.tab().search.is_none();
+        let details = if sel.is_empty() {
+            can_hide = false;
+            self.props_targets.clear();
+            let mut d = Details::default();
+            if let Some(p) = self.tab().path.clone() {
+                d.count = 1;
+                d.name = p
+                    .file_name()
+                    .map_or_else(
+                        || p.display().to_string(),
+                        |n| n.to_string_lossy().into_owned(),
+                    )
+                    .into();
+                d.type_name = findex_core::Kind::Folder.label().into();
+                d.location = p
+                    .parent()
+                    .map(|p| p.display().to_string())
+                    .unwrap_or_default()
+                    .into();
+                if let Ok(t) = p.metadata().and_then(|m| m.modified()) {
+                    let secs = t
+                        .duration_since(std::time::UNIX_EPOCH)
+                        .map_or(0, |d| d.as_secs() as i64);
+                    d.date = format::date(secs).into();
+                }
+            }
+            d
+        } else {
+            self.props_targets = sel.iter().map(|&i| self.tab().model.path_of(i)).collect();
+            let entries = self.tab().model.entries();
+            hidden = sel.iter().all(|&i| entries[i as usize].is_hidden());
+            self.ui.get_details()
+        };
+        self.props.set_details(details);
+        self.props.set_hidden(hidden);
+        self.props.set_can_hide(can_hide);
+        if !self.props.window().is_visible() {
+            let _ = self.props.show();
+            Timer::single_shot(Duration::ZERO, || {
+                with_app(|app| apply_effects(app.props.window(), &app.props.global::<Theme>()))
+            });
+        }
+    }
+
+    fn props_set_hidden(&mut self, hidden: bool) {
+        let paths = self.props_targets.clone();
+        if paths.is_empty() {
+            return;
+        }
+        self.props.set_hidden(hidden);
+        std::thread::spawn(move || {
+            let mut names = Vec::new();
+            let mut err = None;
+            for p in &paths {
+                match findex_platform::set_hidden(p, hidden) {
+                    Ok(n) => {
+                        names.extend(n.file_name().map(|f| f.to_os_string()));
+                    }
+                    Err(e) => err = Some(e),
+                }
+            }
+            post(move |app| {
+                if let Some(e) = err {
+                    app.props.set_hidden(!hidden);
+                    app.toast(format!("{e}"), false);
+                }
+                app.tab_mut().pending_select = names;
+                app.load();
+            });
+        });
     }
 
     // ---------------- transfer window ----------------
@@ -589,7 +680,10 @@ impl App {
                 // "Show in folder": open the parent and select the file.
                 Some(parent) => {
                     self.new_tab(Some(parent.to_path_buf()));
-                    self.tab_mut().pending_select = p.file_name().map(|n| vec![n.to_os_string()]).unwrap_or_default();
+                    self.tab_mut().pending_select = p
+                        .file_name()
+                        .map(|n| vec![n.to_os_string()])
+                        .unwrap_or_default();
                 }
                 None => self.new_tab(Some(p)),
             }
@@ -1330,7 +1424,10 @@ impl App {
             });
             post(move |app| {
                 match r {
-                    Ok(n) => app.toast(format!("Restored {n} item{}", if n == 1 { "" } else { "s" }), false),
+                    Ok(n) => app.toast(
+                        format!("Restored {n} item{}", if n == 1 { "" } else { "s" }),
+                        false,
+                    ),
                     Err(e) => app.toast(format!("Couldn't restore: {e}"), false),
                 }
                 app.load();
@@ -1508,17 +1605,27 @@ impl App {
     }
 
     fn paste(&mut self) {
-        let Some(dest) = self.tab().path.clone() else { return };
+        let Some(dest) = self.tab().path.clone() else {
+            return;
+        };
         if self.tab().search.is_some() {
             return;
         }
         // Another app may own the clipboard: ask the system first, then fall back to ours.
         let ours = self.clipboard.clone();
         std::thread::spawn(move || {
-            let system = findex_platform::get_clipboard_files()
-                .map(|(uris, cut)| (uris.iter().map(|u| crate::parse_location(u)).collect::<Vec<_>>(), cut));
+            let system = findex_platform::get_clipboard_files().map(|(uris, cut)| {
+                (
+                    uris.iter()
+                        .map(|u| crate::parse_location(u))
+                        .collect::<Vec<_>>(),
+                    cut,
+                )
+            });
             post(move |app| {
-                let Some((paths, cut)) = system.or(ours) else { return };
+                let Some((paths, cut)) = system.or(ours) else {
+                    return;
+                };
                 if cut {
                     app.clipboard = None;
                     app.ui.set_can_paste(false);
