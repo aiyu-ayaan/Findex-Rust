@@ -284,28 +284,41 @@ export component TextField inherits Rectangle {
         padding-left: 10px;
         padding-right: 8px;
         spacing: 8px;
-        input := TextInput {
-            accessible-role: none;
-            vertical-alignment: center;
-            color: Theme.text-primary;
-            selection-background-color: Theme.accent;
-            selection-foreground-color: Theme.on-accent;
-            single-line: true;
-            font-size: Theme.font-body;
-            edited => { root.edited(self.text); }
-            accepted => { root.accepted(self.text); }
-            key-pressed(e) => {
-                if e.text == Key.Escape { root.escape(); return accept; }
-                reject
+        // The Flickable makes the caret scroll into view: Slint reveals it by scrolling ancestor Flickables.
+        Rectangle {
+            horizontal-stretch: 1;
+            min-width: 0px;
+            clip: true;
+            Flickable {
+                interactive: false;
+                content-width: max(self.width, input.preferred-width);
+                input := TextInput {
+                    accessible-role: none;
+                    x: 0;
+                    width: max(parent.width, self.preferred-width);
+                    height: parent.height;
+                    vertical-alignment: center;
+                    color: Theme.text-primary;
+                    selection-background-color: Theme.accent;
+                    selection-foreground-color: Theme.on-accent;
+                    single-line: true;
+                    font-size: Theme.font-body;
+                    edited => { root.edited(self.text); }
+                    accepted => { root.accepted(self.text); }
+                    key-pressed(e) => {
+                        if e.text == Key.Escape { root.escape(); return accept; }
+                        reject
+                    }
+                }
             }
             Text {
                 visible: input.text == "";
                 text: root.placeholder;
                 color: Theme.text-secondary;
                 vertical-alignment: center;
+                overflow: elide;
                 width: parent.width;
                 height: parent.height;
-                overflow: elide;
             }
         }
         if has-icon: Image {
