@@ -154,7 +154,7 @@ export component AppWindow inherits Window {
     public function type-into-search(t: string) { address.type-into-search(t); }
     public function show-context(x: length, y: length, on-item: bool) {
         menu-x = min(x, root.width - 268px);
-        menu-y = min(y, root.height - (on-item ? 300px : 240px));
+        menu-y = min(y, root.height - (on-item ? 340px : 330px));
         menu-on-item = on-item;
         context-menu.show();
     }
@@ -477,6 +477,8 @@ export component AppWindow inherits Window {
                 if root.menu-on-item: MenuRow { icon: Icons.open; text: "Open"; shortcut: "Enter"; clicked => { root.item-activated(root.focus-row); } }
                 if root.menu-on-item: MenuRow { icon: Icons.add; text: "Open in new tab"; enabled: root.details.kind == 0; clicked => { root.open-in-new-tab(); } }
                 if root.menu-on-item: MenuRow { icon: Icons.copy; text: "Copy as path"; shortcut: "Ctrl+Shift+C"; clicked => { root.copy-path(); } }
+                if root.menu-on-item: MenuRow { icon: Icons.info; text: "Properties"; clicked => { root.details-pane = true; } }
+                if root.menu-on-item: HDivider { }
                 if root.menu-on-item: MenuRow { icon: Icons.delete; text: "Delete permanently"; shortcut: "Shift+Del"; danger: true; clicked => { root.delete-items(true); } }
                 if !root.menu-on-item: MenuRow { icon: Icons.view-details; text: "View"; clicked => { root.pop-x = root.menu-x; root.pop-y = root.menu-y; view-popup.show(); } }
                 if !root.menu-on-item: MenuRow { icon: Icons.sort; text: "Sort by"; clicked => { root.pop-x = root.menu-x; root.pop-y = root.menu-y; sort-popup.show(); } }
@@ -484,7 +486,10 @@ export component AppWindow inherits Window {
                 if !root.menu-on-item: HDivider { }
                 if !root.menu-on-item: MenuRow { icon: Icons.paste; text: "Paste"; shortcut: "Ctrl+V"; enabled: root.can-paste && !root.this-pc && !root.search-mode; clicked => { root.paste(); } }
                 if !root.menu-on-item: MenuRow { icon: Icons.new-folder; text: "New folder"; shortcut: "Ctrl+Shift+N"; enabled: !root.this-pc && !root.search-mode; clicked => { root.new-folder(); } }
+                if !root.menu-on-item: MenuRow { icon: Icons.new-file; text: "New text document"; enabled: !root.this-pc && !root.search-mode; clicked => { root.new-file(); } }
                 if !root.menu-on-item: MenuRow { icon: Icons.check; text: "Select all"; shortcut: "Ctrl+A"; clicked => { root.select-all(); } }
+                if !root.menu-on-item: HDivider { }
+                if !root.menu-on-item: MenuRow { icon: Icons.info; text: "Properties"; clicked => { root.details-pane = true; } }
             }
         }
     }
