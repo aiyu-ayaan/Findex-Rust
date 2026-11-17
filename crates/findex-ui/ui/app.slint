@@ -87,7 +87,8 @@ export component AppWindow inherits Window {
     callback select-tab(int);
     callback item-down(int, bool, bool, bool);
     callback item-activated(int);
-    callback background-down(bool);
+    callback background-down(bool, bool);
+    callback band(int, int, int, int, int);
     callback sort-by(int, bool);
     callback set-view(int);
     callback key(string, bool, bool, bool, bool) -> bool;
@@ -294,7 +295,8 @@ export component AppWindow inherits Window {
                             sort(k) => { root.sort-by(k, k == root.sort-key ? !root.sort-desc : false); }
                             item-down(i, ctrl, shift, right, x, y) => { root.on-item-down(i, ctrl, shift, right, x, y); }
                             item-activated(i) => { root.item-activated(i); }
-                            background-down(right, x, y) => { root.on-background-down(right, x, y); }
+                            background-down(right, add, x, y) => { root.on-background-down(right, add, x, y); }
+                            band(a, b, c, d, n) => { root.band(a, b, c, d, n); }
                         }
                         grid := GridView {
                             visible: !root.this-pc && root.view-mode != 5;
@@ -305,7 +307,8 @@ export component AppWindow inherits Window {
                             check-boxes: root.check-boxes;
                             item-down(i, ctrl, shift, right, x, y) => { root.on-item-down(i, ctrl, shift, right, x, y); }
                             item-activated(i) => { root.item-activated(i); }
-                            background-down(right, x, y) => { root.on-background-down(right, x, y); }
+                            background-down(right, add, x, y) => { root.on-background-down(right, add, x, y); }
+                            band(a, b, c, d, n) => { root.band(a, b, c, d, n); }
                         }
                         // Empty and error states (no spinner over content; rows stream in).
                         if !root.this-pc && !root.loading && root.rows.length == 0: VerticalLayout {
@@ -363,8 +366,8 @@ export component AppWindow inherits Window {
         list-scope.focus();
         if right { root.show-context(x, y, true); }
     }
-    function on-background-down(right: bool, x: length, y: length) {
-        root.background-down(right);
+    function on-background-down(right: bool, additive: bool, x: length, y: length) {
+        root.background-down(right, additive);
         list-scope.focus();
         if right { root.show-context(x, y, false); }
     }

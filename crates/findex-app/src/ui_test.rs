@@ -6,7 +6,7 @@
 //!
 //! Commands (one per line, `#` comments):
 //!   wait MS | key [ctrl+][shift+][alt+]NAME | type TEXT | click X Y | rclick X Y | dblclick X Y
-//!   resize W H | snap NAME | quit
+//!   drag X1 Y1 X2 Y2 (left-button drag) | resize W H | snap NAME | quit
 //!   tclick X Y | tsnap NAME   (same, in the transfer window)
 //!   oclick X Y | osnap NAME   (same, in the options window)
 //!   expect FIELD TEXT   (polls up to 4 s) where FIELD is status, selection, title, path, toast, view,
@@ -235,6 +235,18 @@ fn step(mut r: Runner) {
             PointerEventButton::Left,
             true,
         ),
+        "drag" => {
+            let w = ui.window();
+            let (a, b) = (
+                LogicalPosition::new(nums[0], nums[1]),
+                LogicalPosition::new(nums[2], nums[3]),
+            );
+            let button = PointerEventButton::Left;
+            w.dispatch_event(WindowEvent::PointerMoved { position: a });
+            w.dispatch_event(WindowEvent::PointerPressed { position: a, button });
+            w.dispatch_event(WindowEvent::PointerMoved { position: b });
+            w.dispatch_event(WindowEvent::PointerReleased { position: b, button });
+        }
         "rclick" => click(
             ui.window(),
             nums[0],

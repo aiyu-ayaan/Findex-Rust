@@ -74,6 +74,57 @@ component ItemTouch inherits TouchArea {
     double-clicked => { item-activated(index); }
 }
 
+/// Empty-area pointer handling: background press (clears selection unless Ctrl/Shift) and rubber-band drag.
+/// Cells are `cell-w` x `cell-h` starting `left` from the edge; the list passes cols = 1.
+component BandTouch inherits TouchArea {
+    in property <length> scroll-y;
+    in property <length> left: 0px;
+    in property <length> cell-w;
+    in property <length> cell-h;
+    in property <int> cols: 1;
+    callback background-down(bool, bool, length, length);
+    callback band(int, int, int, int, int);
+    out property <bool> active;
+    out property <length> bx;
+    out property <length> by;
+    out property <length> bw;
+    out property <length> bh;
+    property <bool> armed;
+    property <length> sx;
+    property <length> sy;
+    pointer-event(e) => {
+        if e.kind == PointerEventKind.down {
+            background-down(e.button == PointerEventButton.right, e.modifiers.control || e.modifiers.shift,
+                self.absolute-position.x + self.mouse-x, self.absolute-position.y + self.mouse-y);
+            armed = e.button == PointerEventButton.left;
+            sx = self.mouse-x;
+            sy = self.mouse-y - scroll-y;
+        } else if e.kind == PointerEventKind.up || e.kind == PointerEventKind.cancel {
+            armed = false;
+            active = false;
+        }
+    }
+    moved => {
+        if armed {
+            active = true;
+            bx = max(0px, min(sx, self.mouse-x));
+            bw = min(self.width, max(sx, self.mouse-x)) - bx;
+            by = max(0px, min(sy + scroll-y, self.mouse-y));
+            bh = min(self.height, max(sy + scroll-y, self.mouse-y)) - by;
+            band(floor((by - scroll-y) / cell-h), floor((by + bh - scroll-y) / cell-h),
+                floor((bx - left) / cell-w), floor((bx + bw - left) / cell-w), cols);
+        }
+    }
+}
+
+component BandRect inherits Rectangle {
+    in property <bool> show;
+    visible: show;
+    background: Theme.accent.with-alpha(0.2);
+    border-width: 1px;
+    border-color: Theme.accent;
+}
+
 component HeaderCell inherits Rectangle {
     in property <string> text;
     in property <int> key;
@@ -168,7 +219,8 @@ export component DetailsView inherits Rectangle {
     callback sort(int);
     callback item-down(int, bool, bool, bool, length, length);
     callback item-activated(int);
-    callback background-down(bool, length, length);
+    callback background-down(bool, bool, length, length);
+    callback band(int, int, int, int, int);
 
     property <length> date-w: 168px;
     property <length> type-w: 148px;
@@ -198,12 +250,12 @@ export component DetailsView inherits Rectangle {
             }
         }
         Rectangle {
-            bg := TouchArea {
-                pointer-event(e) => {
-                    if e.kind == PointerEventKind.down {
-                        root.background-down(e.button == PointerEventButton.right, self.absolute-position.x + self.mouse-x, self.absolute-position.y + self.mouse-y);
-                    }
-                }
+            bg := BandTouch {
+                scroll-y: lv.content-y;
+                cell-w: 10000px;
+                cell-h: Theme.row-height;
+                background-down(r, a, x, y) => { root.background-down(r, a, x, y); }
+                band(a, b, c, d, n) => { root.band(a, b, c, d, n); }
             }
             lv := ListView {
                 for row[i] in rows: Rectangle {
@@ -263,10 +315,10 @@ export component DetailsView inherits Rectangle {
                     }
                 }
             }
+            BandRect { show: bg.active; x: bg.bx; y: bg.by; width: bg.bw; height: bg.bh; }
         }
     }
 }
-
 component GridCell inherits Rectangle {
     in property <FileRow> item;
     in property <int> index;
@@ -386,7 +438,8 @@ export component GridView inherits Rectangle {
     in property <bool> check-boxes;
     callback item-down(int, bool, bool, bool, length, length);
     callback item-activated(int);
-    callback background-down(bool, length, length);
+    callback background-down(bool, bool, length, length);
+    callback band(int, int, int, int, int);
 
     property <length> cell-w: mode == 0 ? 224px : mode == 1 ? 128px : mode == 2 ? 92px : mode == 6 ? 280px : mode == 7 ? max(200px, self.width - 24px) : 260px;
     property <length> cell-h: mode == 0 ? 268px : mode == 1 ? 164px : mode == 2 ? 112px : mode == 6 ? 76px : mode == 7 ? 68px : Theme.row-height;
@@ -402,12 +455,14 @@ export component GridView inherits Rectangle {
         }
     }
 
-    TouchArea {
-        pointer-event(e) => {
-            if e.kind == PointerEventKind.down {
-                root.background-down(e.button == PointerEventButton.right, self.absolute-position.x + self.mouse-x, self.absolute-position.y + self.mouse-y);
-            }
-        }
+    bg := BandTouch {
+        scroll-y: lv.content-y;
+        left: 12px;
+        cell-w: root.cell-w;
+        cell-h: root.cell-h;
+        cols: root.cols;
+        background-down(r, a, x, y) => { root.background-down(r, a, x, y); }
+        band(a, b, c, d, n) => { root.band(a, b, c, d, n); }
     }
     lv := ListView {
         for line in line-count: Rectangle {
@@ -427,5 +482,5 @@ export component GridView inherits Rectangle {
                 item-activated(a) => { root.item-activated(a); }
             }
         }
-    }
+    }    BandRect { show: bg.active; x: bg.bx; y: bg.by; width: bg.bw; height: bg.bh; }
 }

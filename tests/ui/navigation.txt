@@ -75,3 +75,9 @@ expect title Deep
 expect crumbs Gamma > Deep
 key alt+Left
 expect title findex-ui-fixture
+# rubber band from empty space below the rows up to row 2 selects rows 2-16
+key Escape
+drag 600 735 600 251
+expect selection 15 items selected
+click 400 187
+expect selection 1 item selected

@@ -314,8 +314,13 @@ fn wire(ui: &AppWindow) {
             app.activate(i as usize)
         }
     });
-    on!(on_background_down, |app, _right| {
-        app.tab().model.clear_selection();
+    on!(on_background_down, |app, right, additive| {
+        // Right-click on empty space clears; a left press starts a rubber band (Ctrl/Shift keeps the selection).
+        app.tab().model.band_begin(additive && !right);
+        app.update_status();
+    });
+    on!(on_band, |app, r0, r1, c0, c1, n| {
+        app.tab().model.band_select((r0, r1), (c0, c1), n);
         app.update_status();
     });
     on!(on_sort_by, |app, k, desc| app
