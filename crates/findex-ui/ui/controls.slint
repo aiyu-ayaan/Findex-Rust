@@ -211,6 +211,27 @@ export component Flyout inherits Rectangle {
     drop-shadow-color: Theme.dark ? #00000080 : #00000030;
 }
 
+/// Label centred in its parent on whole physical pixels. The GPU renderer smears glyphs whose origin
+/// lands between pixels (seen as broken letters in centred button text), so centred text goes through here.
+export component SnappedText {
+    in property <string> text;
+    in property <brush> color: Theme.text-primary;
+    in property <length> font-size: Theme.font-body;
+    in property <int> font-weight: 400;
+    out property <length> text-width: t.preferred-width;
+    t := Text {
+        text: root.text;
+        color: root.color;
+        font-size: root.font-size;
+        font-weight: root.font-weight;
+        width: min(self.preferred-width, root.width);
+        height: self.preferred-height;
+        overflow: elide;
+        x: Math.round((root.absolute-position.x + (root.width - self.width) / 2) / 1phx) * 1phx - root.absolute-position.x;
+        y: Math.round((root.absolute-position.y + (root.height - self.height) / 2) / 1phx) * 1phx - root.absolute-position.y;
+    }
+}
+
 /// Accent-filled primary button or neutral secondary button for dialogs.
 export component DialogButton inherits Rectangle {
     in property <string> text;
@@ -228,17 +249,17 @@ export component DialogButton inherits Rectangle {
     accessible-role: button;
     accessible-label: text;
     accessible-action-default => { clicked(); }
+    // Laid out by preferred width so the button grows with its label; the label itself is pixel-snapped.
     HorizontalLayout {
         padding-left: 12px;
         padding-right: 12px;
-        alignment: center;
-        Text {
-            text: root.text;
-            color: primary ? Theme.on-accent : Theme.text-primary;
-            font-size: Theme.font-body;
-            horizontal-alignment: center;
-            vertical-alignment: center;
-        }
+        Rectangle { min-width: label.text-width; }
+    }
+    label := SnappedText {
+        width: 100%;
+        height: 100%;
+        text: root.text;
+        color: primary ? Theme.on-accent : Theme.text-primary;
     }
     fs := FocusScope {
         key-pressed(e) => {

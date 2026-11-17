@@ -1,6 +1,6 @@
 // Transfer panel, dialogs and toast.
 import { Theme } from "theme.slint";
-import { DialogButton, TextField } from "controls.slint";
+import { DialogButton, SnappedText, TextField } from "controls.slint";
 
 /// Modal dialog: smoke layer, 480 px max, 24 px padding, one primary action. Escape cancels.
 export component Dialog inherits Rectangle {
@@ -99,14 +99,11 @@ export component Toast inherits Rectangle {
             accessible-role: button;
             accessible-label: "Undo";
             accessible-action-default => { root.undo(); }
-            Text {
+            SnappedText {
                 width: parent.width;
                 height: parent.height;
                 text: "Undo";
                 color: Theme.accent;
-                font-size: Theme.font-body;
-                horizontal-alignment: center;
-                vertical-alignment: center;
             }
             u := TouchArea { clicked => { root.undo(); } }
         }

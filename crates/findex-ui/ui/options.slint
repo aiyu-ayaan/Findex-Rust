@@ -3,7 +3,7 @@
 import { ScrollView, CheckBox } from "std-widgets.slint";
 import { Theme } from "theme.slint";
 import { Icons } from "icons.slint";
-import { DialogButton, HDivider } from "controls.slint";
+import { DialogButton, HDivider, SnappedText } from "controls.slint";
 
 export struct Options {
     // General
@@ -97,21 +97,19 @@ component PageTab inherits Rectangle {
     in property <string> text;
     in property <bool> selected;
     callback clicked;
-    width: label.preferred-width + 24px;
+    width: label.text-width + 24px;
     accessible-role: tab;
     accessible-label: text;
     accessible-item-selected: selected;
     accessible-action-default => { clicked(); }
     background: t.has-hover && !selected ? Theme.subtle-hover : transparent;
     border-radius: Theme.radius;
-    label := Text {
-        height: parent.height;
+    label := SnappedText {
+        width: 100%;
+        height: 100%;
         text: root.text;
         color: selected ? Theme.text-primary : Theme.text-secondary;
-        font-size: Theme.font-body;
         font-weight: selected ? 600 : 400;
-        horizontal-alignment: center;
-        vertical-alignment: center;
     }
     // Selected tab: accent pill under the label (not colour-only: weight changes too).
     Rectangle {
