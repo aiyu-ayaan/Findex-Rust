@@ -14,6 +14,6 @@ const replace = (text, pattern, value, path) => {
   return text.replace(pattern, value)
 }
 
-edit('Cargo.toml', (t) => replace(t, /(\[workspace\.package\]\nversion = ")[^"]*/, `$1${version}`, 'Cargo.toml'))
+edit('Cargo.toml', (t) => replace(t, /(\[workspace\.package\][^[]*?\nversion = ")[^"]*/, `$1${version}`, 'Cargo.toml'))
 edit('Cargo.lock', (t) => t.replace(/(name = "findex-[a-z-]+"\nversion = ")[^"]*/g, `$1${version}`))
 console.log(`version ${version}`)
