@@ -70,7 +70,7 @@ Request: "Copy and paste same panel". Interpretation used here: copy, cut, paste
   - Undo and redo of the last operation (Ctrl+Z / Ctrl+Y) for rename, move, copy, new folder, delete-to-trash.
   - Verification option: compare hash after copy (off by default).
   - Survives tab and window close: jobs belong to the application, not to a tab.
-- Delete: to trash by default, Shift+Delete permanently with a confirmation. Trash view with restore and empty.
+- Delete: to trash by default, Shift+Delete permanently with a confirmation. Trash view with restore and empty. Linux: "Restore" in the context menu while viewing Trash puts items back via `trash::os_limited`.
 - Rename: F2, batch rename for multiple selection (Win11 renames sequentially with "name (n)"), optional pattern rename (P2).
 - New: folder, file from templates, shortcut/symlink.
 - Properties dialog: general, security/permissions, details, with checksum tab (P1).

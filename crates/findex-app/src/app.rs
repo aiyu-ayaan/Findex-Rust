@@ -342,6 +342,7 @@ fn wire(ui: &AppWindow) {
     on!(on_new_file, |app| app.create_new(false));
     on!(on_copy_path, |app| app.copy_path());
     on!(on_open_in_new_tab, |app| app.open_selected_in_new_tab());
+    on!(on_restore_items, |app| app.restore_selected());
     on!(on_select_all, |app| {
         app.tab().model.select_all();
         app.update_status();
@@ -824,6 +825,7 @@ impl App {
         let tab = self.tab();
         let ui = &self.ui;
         ui.set_this_pc(tab.path.is_none());
+        ui.set_in_trash(tab.path.is_some() && tab.path == findex_platform::trash_dir());
         ui.set_loading(tab.loading);
         ui.set_error_text(tab.error.clone().into());
         ui.set_search_mode(tab.search.is_some());
@@ -1262,6 +1264,42 @@ impl App {
                 }
             });
         }
+    }
+
+    /// Restores the selected Trash items to where they were deleted from.
+    fn restore_selected(&mut self) {
+        let names: Vec<OsString> = self
+            .tab()
+            .model
+            .selected_paths()
+            .iter()
+            .filter_map(|p| p.file_name().map(|n| n.to_os_string()))
+            .collect();
+        if names.is_empty() {
+            return;
+        }
+        std::thread::spawn(move || {
+            let r = trash::os_limited::list().and_then(|items| {
+                // The freedesktop item id is the `<name>.trashinfo` path next to `files/<name>`.
+                let pick: Vec<_> = items
+                    .into_iter()
+                    .filter(|i| {
+                        Path::new(&i.id)
+                            .file_stem()
+                            .is_some_and(|stem| names.iter().any(|n| n == stem))
+                    })
+                    .collect();
+                let n = pick.len();
+                trash::os_limited::restore_all(pick).map(|_| n)
+            });
+            post(move |app| {
+                match r {
+                    Ok(n) => app.toast(format!("Restored {n} item{}", if n == 1 { "" } else { "s" }), false),
+                    Err(e) => app.toast(format!("Couldn't restore: {e}"), false),
+                }
+                app.load();
+            });
+        });
     }
 
     fn open_selected_in_new_tab(&mut self) {

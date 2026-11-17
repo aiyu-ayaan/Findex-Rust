@@ -54,7 +54,7 @@ Legend: `[ ]` open, `[x]` done. P0 = v1.0 blocker, P1 = v1.0 target, P2 = later.
 - [x] Timeout-guarded free-space probes
 - [ ] Windows: logical drives, network drives, known folders, Recycle Bin (drives + known folders done, untested on hardware)
 - [x] This PC page with usage bars and groups
-- [ ] Trash provider and Trash view with restore
+- [ ] Trash provider and Trash view with restore (restore from context menu done on Linux; "Empty Trash" and original-location column open)
 
 ## M3 Operations (P0)
 

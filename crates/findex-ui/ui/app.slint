@@ -54,6 +54,7 @@ export component AppWindow inherits Window {
     in property <bool> search-mode;
     in-out property <string> search-text;
     in property <bool> this-pc;
+    in property <bool> in-trash;
     in property <[NavItem]> nav-items;
     in property <[DriveData]> drives;
     in property <[DriveData]> network-drives;
@@ -103,6 +104,7 @@ export component AppWindow inherits Window {
     callback new-file();
     callback copy-path();
     callback open-in-new-tab();
+    callback restore-items();
     callback select-all();
     callback search-edited(string);
     callback search-submitted(string);
@@ -475,6 +477,7 @@ export component AppWindow inherits Window {
                 }
                 if root.menu-on-item: HDivider { }
                 if root.menu-on-item: MenuRow { icon: Icons.open; text: "Open"; shortcut: "Enter"; clicked => { root.item-activated(root.focus-row); } }
+                if root.menu-on-item && root.in-trash: MenuRow { icon: Icons.undo; text: "Restore"; clicked => { root.restore-items(); } }
                 if root.menu-on-item: MenuRow { icon: Icons.add; text: "Open in new tab"; enabled: root.details.kind == 0; clicked => { root.open-in-new-tab(); } }
                 if root.menu-on-item: MenuRow { icon: Icons.copy; text: "Copy as path"; shortcut: "Ctrl+Shift+C"; clicked => { root.copy-path(); } }
                 if root.menu-on-item: MenuRow { icon: Icons.info; text: "Properties"; clicked => { root.details-pane = true; } }
