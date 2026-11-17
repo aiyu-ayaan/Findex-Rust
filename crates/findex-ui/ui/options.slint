@@ -38,6 +38,56 @@ export struct Options {
     update-channel: int,
 }
 
+/// One open-source project in About > Acknowledgements.
+struct Credit { name: string, license: string, url: string }
+
+/// Clickable row with a title and a subtitle. Opens a link (external-link mark) or a page (chevron).
+component LinkRow inherits Rectangle {
+    in property <string> title;
+    in property <string> subtitle;
+    in property <bool> chevron;
+    callback clicked;
+    height: 48px;
+    border-radius: Theme.radius;
+    background: t.has-hover ? Theme.subtle-hover : transparent;
+    accessible-role: button;
+    accessible-label: title;
+    accessible-description: subtitle;
+    accessible-action-default => { clicked(); }
+    forward-focus: fs;
+    HorizontalLayout {
+        padding-left: 8px;
+        padding-right: 8px;
+        spacing: 12px;
+        VerticalLayout {
+            alignment: center;
+            horizontal-stretch: 1;
+            Text { text: root.title; color: Theme.text-primary; overflow: elide; }
+            if root.subtitle != "": Text { text: root.subtitle; color: Theme.text-secondary; font-size: Theme.font-caption; overflow: elide; }
+        }
+        Image {
+            source: root.chevron ? Icons.chevron-right : Icons.open;
+            width: 16px;
+            height: 16px;
+            y: (parent.height - 16px) / 2;
+            colorize: Theme.text-secondary;
+            accessible-role: none;
+        }
+    }
+    fs := FocusScope {
+        key-pressed(e) => {
+            if e.text == " " || e.text == "\n" { root.clicked(); return accept; }
+            reject
+        }
+    }
+    t := TouchArea { clicked => { fs.focus(); root.clicked(); } }
+    if fs.has-focus: Rectangle {
+        border-radius: Theme.radius;
+        border-width: 2px;
+        border-color: Theme.text-primary;
+    }
+}
+
 component SectionTitle inherits Text {
     color: Theme.text-primary;
     font-weight: 600;
@@ -160,6 +210,30 @@ export component OptionsWindow inherits Window {
     in property <float> update-progress: -1;
     callback check-updates(int);
     callback install-update();
+    // About page
+    in property <string> repo-url;
+    in property <string> platform;
+    callback open-url(string);
+    property <[Credit]> libraries: [
+        { name: "Slint", license: "GPL-3.0-only OR Slint Royalty-free 2.0 OR Slint Software 3.0", url: "https://slint.dev" },
+        { name: "Rust and its standard library", license: "MIT OR Apache-2.0", url: "https://www.rust-lang.org" },
+        { name: "image and png", license: "MIT OR Apache-2.0", url: "https://github.com/image-rs/image" },
+        { name: "nucleo-matcher", license: "MPL-2.0", url: "https://github.com/helix-editor/nucleo" },
+        { name: "rustix", license: "Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT", url: "https://github.com/bytecodealliance/rustix" },
+        { name: "zbus", license: "MIT", url: "https://github.com/z-galaxy/zbus" },
+        { name: "trash", license: "MIT", url: "https://github.com/ArturKovacs/trash" },
+        { name: "chrono", license: "MIT OR Apache-2.0", url: "https://github.com/chronotope/chrono" },
+        { name: "dirs", license: "MIT OR Apache-2.0", url: "https://github.com/soc/dirs-rs" },
+        { name: "serde_json", license: "MIT OR Apache-2.0", url: "https://github.com/serde-rs/json" },
+        { name: "md-5", license: "MIT OR Apache-2.0", url: "https://github.com/RustCrypto/hashes" },
+        { name: "raw-window-handle", license: "MIT OR Apache-2.0 OR Zlib", url: "https://github.com/rust-windowing/raw-window-handle" },
+        { name: "windows-sys", license: "MIT OR Apache-2.0", url: "https://github.com/microsoft/windows-rs" },
+    ];
+    property <[Credit]> assets: [
+        { name: "Inter", license: "OFL-1.1", url: "https://github.com/rsms/inter" },
+        { name: "Fluent System Icons", license: "MIT", url: "https://github.com/microsoft/fluentui-system-icons" },
+        { name: "curl (downloads updates; comes with the system)", license: "curl", url: "https://curl.se" },
+    ];
 
     esc := FocusScope {
         init => { self.focus(); }
@@ -206,6 +280,7 @@ export component OptionsWindow inherits Window {
                 PageTab { text: "Findex"; selected: page == 3; clicked => { page = 3; } }
                 PageTab { text: "Hidden drives"; selected: page == 4; clicked => { page = 4; } }
                 PageTab { text: "Updates"; selected: page == 5; clicked => { page = 5; } }
+                PageTab { text: "About"; selected: page == 6 || page == 7; clicked => { page = 6; } }
             }
             Rectangle {
                 vertical-stretch: 1;
@@ -351,6 +426,73 @@ export component OptionsWindow inherits Window {
                                 SectionTitle { text: "What's new in " + update-found; }
                                 Text { text: update-notes; color: Theme.text-primary; wrap: word-wrap; accessible-role: AccessibleRole.text; }
                             }
+                        }
+
+                        if page == 6: VerticalLayout {
+                            spacing: 6px;
+                            HorizontalLayout {
+                                spacing: 16px;
+                                Image { source: Icons.app-icon; width: 48px; height: 48px; accessible-role: none; }
+                                VerticalLayout {
+                                    alignment: center;
+                                    spacing: 2px;
+                                    Text { text: "Findex"; color: Theme.text-primary; font-size: Theme.font-subtitle; font-weight: 600; }
+                                    Text { text: "Version " + app-version + " for " + platform; color: Theme.text-secondary; }
+                                }
+                            }
+                            Rectangle { height: 4px; }
+                            Text {
+                                text: "A fast file explorer with the Windows 11 look, for Linux and Windows.";
+                                color: Theme.text-primary;
+                                wrap: word-wrap;
+                            }
+                            Rectangle { height: 4px; }
+                            LinkRow { title: "Source code"; subtitle: "github.com/aiyu-ayaan/Findex-Rust"; clicked => { root.open-url(repo-url); } }
+                            LinkRow { title: "License"; subtitle: "Apache-2.0"; clicked => { root.open-url(repo-url + "/blob/master/LICENSE"); } }
+                            LinkRow { title: "Acknowledgements"; subtitle: "The libraries, font and icons Findex is built with"; chevron: true; clicked => { page = 7; } }
+                            Rectangle { height: 10px; }
+                            SectionTitle { text: "Developer"; }
+                            HorizontalLayout {
+                                spacing: 16px;
+                                padding-top: 4px;
+                                padding-bottom: 4px;
+                                Rectangle {
+                                    width: 64px;
+                                    height: 64px;
+                                    border-radius: 32px;
+                                    clip: true;
+                                    Image { source: @image-url("images/developer.png"); width: 64px; height: 64px; image-fit: cover; accessible-role: none; }
+                                }
+                                VerticalLayout {
+                                    alignment: center;
+                                    spacing: 2px;
+                                    Text { text: "aiyu-ayaan"; color: Theme.text-primary; font-weight: 600; }
+                                    Text { text: "Designed and built by one developer."; color: Theme.text-secondary; wrap: word-wrap; }
+                                }
+                            }
+                            LinkRow { title: "GitHub"; subtitle: "github.com/aiyu-ayaan"; clicked => { root.open-url("https://github.com/aiyu-ayaan"); } }
+                            LinkRow { title: "Portfolio"; subtitle: "aiyu.co.in"; clicked => { root.open-url("https://aiyu.co.in"); } }
+                        }
+
+                        if page == 7: VerticalLayout {
+                            spacing: 2px;
+                            HorizontalLayout {
+                                alignment: start;
+                                padding-bottom: 8px;
+                                DialogButton { text: "Back to About"; min-width: 120px; clicked => { page = 6; } }
+                            }
+                            SectionTitle { text: "Acknowledgements"; }
+                            Text {
+                                text: "Findex is built on these open-source projects. Select one to open its home page.";
+                                color: Theme.text-secondary;
+                                wrap: word-wrap;
+                            }
+                            Rectangle { height: 8px; }
+                            SectionTitle { text: "Libraries"; }
+                            for c in libraries: LinkRow { title: c.name; subtitle: c.license; clicked => { root.open-url(c.url); } }
+                            Rectangle { height: 8px; }
+                            SectionTitle { text: "Font, icons and tools"; }
+                            for c in assets: LinkRow { title: c.name; subtitle: c.license; clicked => { root.open-url(c.url); } }
                         }
                     }
                 }

@@ -179,6 +179,21 @@ pub fn start(ui: AppWindow, start: Option<PathBuf>) {
     options.on_check_updates(|channel| with_app(|app| app.check_updates(channel, false)));
     options.on_install_update(|| with_app(|app| app.install_update()));
     options.set_app_version(update::VERSION.into());
+    options.set_repo_url(update::REPO_URL.into());
+    let os = match std::env::consts::OS {
+        "linux" => "Linux",
+        "windows" => "Windows",
+        other => other,
+    };
+    options.set_platform(format!("{os} ({})", std::env::consts::ARCH).into());
+    options.on_open_url(|url| {
+        let url = url.to_string();
+        std::thread::spawn(move || {
+            if let Err(e) = findex_platform::open_default(Path::new(&url)) {
+                post(move |app| app.toast(format!("Could not open {url}: {e}"), false));
+            }
+        });
+    });
     options.set_self_install(update::self_install());
     options.set_update_status(
         if update::is_dev() {

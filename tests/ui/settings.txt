@@ -89,6 +89,16 @@ osnap 77-options-hidden-drives
 oclick 454 65
 wait 200
 osnap 78-options-updates
+# --- About page and its Acknowledgements page
+oclick 531 65
+wait 200
+osnap 79-options-about
+oclick 200 337
+wait 200
+osnap 80-options-acknowledgements
+oclick 84 120
+wait 200
+osnap 81-options-about-back
 # --- Restore Defaults puts everything back (theme stays as chosen)
 oclick 86 608
 oclick 368 608
