@@ -16,6 +16,18 @@ use windows_sys::Win32::UI::Controls::MARGINS;
 use windows_sys::Win32::UI::Shell::ShellExecuteW;
 use windows_sys::Win32::UI::WindowsAndMessaging::SW_SHOWNORMAL;
 
+/// Release asset this install updates from (see `.github/workflows/release.yml`).
+pub const UPDATE_ASSET: &str = "-windows-x64.zip";
+
+/// A helper process (such as `curl.exe`) started without a console window flashing up.
+pub fn background_command(program: &str) -> std::process::Command {
+    use std::os::windows::process::CommandExt;
+    const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+    let mut c = std::process::Command::new(program);
+    c.stdin(std::process::Stdio::null()).creation_flags(CREATE_NO_WINDOW);
+    c
+}
+
 const FIRST_CHUNK: usize = 256;
 const CHUNK: usize = 2000;
 const PROBE_TIMEOUT: Duration = Duration::from_millis(1500);

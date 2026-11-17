@@ -1243,6 +1243,7 @@ dependencies = [
  "findex-ui",
  "image",
  "raw-window-handle",
+ "serde_json",
  "slint",
  "trash",
 ]

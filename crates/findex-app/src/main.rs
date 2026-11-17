@@ -4,6 +4,7 @@ mod app;
 mod model;
 mod settings;
 mod ui_test;
+mod update;
 
 use std::path::PathBuf;
 use std::time::{Duration, Instant};

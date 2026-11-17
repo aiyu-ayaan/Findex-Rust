@@ -14,6 +14,16 @@ pub use drives::{drives, eject, mount};
 pub use fs::{copy_file, copy_symlink, device_id, list_dir};
 pub use ipc::{forward as forward_to_running, listen as listen_for_instances};
 
+/// Release asset a non-AppImage install updates from (see `.github/workflows/release.yml`).
+pub const UPDATE_ASSET: &str = "_amd64.deb";
+
+/// A helper process (such as `curl`) started without a console window.
+pub fn background_command(program: &str) -> Command {
+    let mut c = Command::new(program);
+    c.stdin(Stdio::null());
+    c
+}
+
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::sync::mpsc;
