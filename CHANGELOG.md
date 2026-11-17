@@ -1,0 +1,73 @@
+## v0.0.1-alpha.1 (2026-11-17)
+
+- !alpha fix(release): find the version line wherever it sits in [workspace.package]
+- !alpha first alpha release: GitHub-release updater, Updates and About pages, button text fix
+- style: fix clippy item order in fs.rs and rustfmt the Windows platform crate
+- style: format code for improved readability and consistency
+- style: rustfmt the updater code
+- feat(ui): About page with the developer and acknowledgements
+- feat(ui): Updates page in Folder Options and an update prompt at start
+- fix(ui): keep dialog buttons at their label width
+- feat(update): check and install releases from GitHub by channel
+- fix(ui): snap centred button text to whole pixels
+- fix(ui): text fields scroll to follow the caret
+- fix(ui): keep long names inside the Properties name field
+- fix(ui): Properties attribute edits and folder walk
+- feat(ui): Explorer-style General tab in Properties
+- feat(ui): Properties window with a Hidden attribute toggle
+- feat(ui): drag tabs to reorder them
+- feat(platform): share the file clipboard with other managers on Linux
+- feat(ops): one job queue per destination device
+- feat(platform): bind Super+E on GNOME with a saved previous value
+- feat(platform): org.freedesktop.FileManager1 D-Bus service and activation file
+- feat(platform): single-instance handoff over a Unix socket on Linux
+- feat(app): restore selected items from the Trash view
+- feat(app): reopen closed tab and duplicate tab shortcuts
+- fix(ui): start rubber-band selection when dragging from an item
+- feat(ui): add Properties and New text document to the context menu
+- feat(ui): rubber-band drag selection in details and icon views
+- feat(app): add rubber-band selection to the listing model
+- test(ui): update options View coordinates and cover Hidden drives tab
+- feat(ui): move hidden drives to a dedicated Hidden drives tab
+- refactor(ui): reuse DialogButton for the error Retry button
+- fix(ui): center PageTab, Toast Undo, and Details Cell text vertically
+- fix(ui): center DialogButton label vertically in HorizontalLayout
+- fix(ui): clip long icon-view names to two lines and give the options footer an opaque background
+- feat(thumbs): video thumbnails through ffmpegthumbnailer or ffmpeg with a 10 s limit
+- feat(app): rename and hide drives, separate Network nav group, mouse back/forward, Esc closes options
+- feat(drives): name unlabeled Linux volumes 'Local Disk (size)' instead of the UUID
+- fix(run): don't pass a default path so the Open Findex to setting applies
+- fix: update repository links to Switchboard-Rust in configuration and documentation
+- feat: add Apache-2.0 license and update related documentation
+- docs: add README, release guide and update progress
+- ci: add CI and Domus-style release workflow with AppImage, deb and installer
+- test(ui): add shell, settings suites and a runner for all suites
+- chore: start versions at 0.0.0 and drop the undecided licence
+- build(platform): compile the Linux crate only on Linux
+- fix(platform): point the default-handler entry at the AppImage file
+- feat(app): apply Folder Options to browsing, views, search and navigation
+- feat(ui): add Folder Options window and check-box selection
+- feat(brand): use the Findex logo for the window and packages
+- test(ui): add fixture generator and end-to-end UI scripts
+- feat(app): add main window with tabs, views, search, transfers and scripted UI tests
+- feat(ui): add Windows 11 style Slint UI with light, dark and translucent surfaces
+- style: apply rustfmt
+- fix(core): use singular label for one byte
+- feat(platform): detect system dark mode on Linux and Windows
+- feat(thumbs): add image thumbnails with shared freedesktop cache
+- feat(scan): add parallel streaming fuzzy search
+- feat(ops): add transfer job queue for copy, move, trash and delete
+- feat(platform): add Linux and Windows listing, drives, copy and default handler
+- feat(core): add workspace and core models, natural sort, history, fuzzy match
+- docs: add CLAUDE.md compiling the design
+- docs: add milestone TODO list
+- docs: add roadmap, spikes and risk register
+- docs: define Windows 11 style UI design language
+- docs: design disk cleanup, deep clean and thumbnail pipeline
+- docs: add performance budgets and pipeline design
+- docs: add architecture and toolkit decision
+- docs: design default file manager, Win+E and drive discovery
+- docs: define feature scope including tabs and transfer panel
+- docs: add research findings and docs index
+- chore: add repo tooling, skills and gitignore
+
