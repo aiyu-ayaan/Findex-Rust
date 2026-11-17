@@ -31,6 +31,8 @@ component Tab inherits Rectangle {
     in property <bool> show-separator;
     callback select;
     callback close;
+    callback drag(length);
+    callback drag-end(length);
     height: 32px;
     accessible-role: tab;
     accessible-label: title;
@@ -53,7 +55,9 @@ component Tab inherits Rectangle {
         pointer-event(e) => {
             if e.kind == PointerEventKind.down && e.button == PointerEventButton.left { root.select(); }
             if e.kind == PointerEventKind.up && e.button == PointerEventButton.middle { root.close(); }
+            if e.kind == PointerEventKind.up && e.button == PointerEventButton.left { root.drag-end(self.mouse-x - self.pressed-x); }
         }
+        moved => { if self.pressed { root.drag(self.mouse-x - self.pressed-x); } }
     }
     HorizontalLayout {
         padding-left: 12px;
@@ -93,12 +97,18 @@ export component TabStrip inherits Rectangle {
     in property <int> active;
     callback select(int);
     callback close(int);
+    callback reorder(int, int);
     callback new-tab();
     callback minimize();
     callback toggle-maximize();
     callback close-window();
     height: Theme.tab-strip-height;
     accessible-role: tab-list;
+
+    // Drag to reorder: a line shows where the tab will land; the move happens on release.
+    property <int> drag-from: -1;
+    property <int> drag-to: -1;
+    function target(i: int, dx: length) -> int { return clamp(i + round(dx / tab-w), 0, tabs.length - 1); }
 
     property <length> tab-w: clamp((self.width - 8px - 40px - 3 * 46px - 48px) / max(1, tabs.length), 96px, 240px);
 
@@ -117,6 +127,21 @@ export component TabStrip inherits Rectangle {
                 show-separator: i != active - 1;
                 select => { root.select(i); }
                 close => { root.close(i); }
+                drag(dx) => {
+                    if abs(dx) > 8px { root.drag-from = i; root.drag-to = root.target(i, dx); }
+                }
+                drag-end(dx) => {
+                    if root.drag-from == i && root.drag-to != i { root.reorder(i, root.drag-to); }
+                    root.drag-from = -1;
+                    root.drag-to = -1;
+                }
+            }
+            if drag-from >= 0 && drag-to != drag-from: Rectangle {
+                x: (drag-to > drag-from ? drag-to + 1 : drag-to) * tab-w - 1px;
+                y: parent.height - 28px;
+                width: 2px;
+                height: 24px;
+                background: Theme.accent;
             }
             IconButton {
                 x: tabs.length * tab-w + 4px;

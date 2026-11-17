@@ -34,6 +34,17 @@ snap 51-two-tabs
 key ctrl+w
 expect tabs 1
 expect title findex-ui-fixture
+# reopen the closed tab (Ctrl+Shift+T), then drag tab 1 past tab 2 (240 px wide tabs at 1280 px)
+key ctrl+shift+t
+expect tabs 2
+expect title Home
+drag 100 24 400 24
+expect title findex-ui-fixture
+click 100 24
+expect title Home
+key ctrl+w
+expect tabs 1
+expect title findex-ui-fixture
 # --- This PC
 key ctrl+l
 key ctrl+a

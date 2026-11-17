@@ -32,7 +32,7 @@ Legend: `[ ]` open, `[x]` done. P0 = v1.0 blocker, P1 = v1.0 target, P2 = later.
 ## M1 Browse (P0)
 
 - [x] Window shell with custom title bar
-- [ ] Tab strip: open, close, switch, reorder, overflow, per-tab state (open/close/switch/per-tab state done; drag reorder open)
+- [x] Tab strip: open, close, switch, reorder (drag with a drop line), per-tab state (overflow scrolling open)
 - [ ] Command bar with overflow (labels collapse; item overflow open)
 - [x] Address bar with breadcrumbs and editable path
 - [ ] Navigation pane tree (lazy) (flat places + drives done; expandable tree open)

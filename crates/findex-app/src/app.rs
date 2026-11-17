@@ -308,6 +308,7 @@ fn wire(ui: &AppWindow) {
         app.new_tab(p)
     });
     on!(on_close_tab, |app, i| app.close_tab(i as usize));
+    on!(on_reorder_tab, |app, from, to| app.reorder_tab(from as usize, to as usize));
     on!(on_select_tab, |app, i| app.switch_tab(i as usize));
     on!(on_item_down, |app, i, ctrl, shift, right| app
         .item_down(i as usize, ctrl, shift, right));
@@ -596,6 +597,22 @@ impl App {
         let w = self.ui.window();
         w.set_minimized(false);
         let _ = w.show();
+    }
+
+    fn reorder_tab(&mut self, from: usize, to: usize) {
+        if from >= self.tabs.len() || to >= self.tabs.len() || from == to {
+            return;
+        }
+        let tab = self.tabs.remove(from);
+        self.tabs.insert(to, tab);
+        // The active tab keeps its identity, not its index.
+        self.active = match self.active {
+            a if a == from => to,
+            a if from < a && a <= to => a - 1,
+            a if to <= a && a < from => a + 1,
+            a => a,
+        };
+        self.sync_tabs();
     }
 
     fn reopen_closed_tab(&mut self) {

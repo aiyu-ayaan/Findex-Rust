@@ -85,6 +85,7 @@ export component AppWindow inherits Window {
     callback refresh();
     callback new-tab();
     callback close-tab(int);
+    callback reorder-tab(int, int);
     callback select-tab(int);
     callback item-down(int, bool, bool, bool);
     callback item-activated(int);
@@ -208,6 +209,7 @@ export component AppWindow inherits Window {
                 active: root.active-tab;
                 select(i) => { root.select-tab(i); }
                 close(i) => { root.close-tab(i); }
+                reorder(from, to) => { root.reorder-tab(from, to); }
                 new-tab => { root.new-tab(); }
                 minimize => { root.minimized = true; }
                 toggle-maximize => { root.maximized = !root.maximized; }
