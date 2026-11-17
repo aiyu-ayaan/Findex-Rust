@@ -9,6 +9,7 @@
 //!   drag X1 Y1 X2 Y2 (left-button drag) | resize W H | snap NAME | quit
 //!   tclick X Y | tsnap NAME   (same, in the transfer window)
 //!   oclick X Y | osnap NAME   (same, in the options window)
+//!   pclick X Y | psnap NAME   (same, in the properties window)
 //!   expect FIELD TEXT   (polls up to 4 s) where FIELD is status, selection, title, path, toast, view,
 //!   tabs, rows, rows>=, crumbs, error, details
 //!   wait-jobs           (until no transfer is running)
@@ -148,6 +149,11 @@ fn field(ui: &AppWindow, name: &str) -> String {
         "jobs" => ui.get_active_jobs().to_string(),
         "transfer-window" => transfer().window().is_visible().to_string(),
         "options-window" => options().window().is_visible().to_string(),
+        "properties-window" => properties().window().is_visible().to_string(),
+        "properties" => {
+            let d = properties().get_data();
+            format!("{} | {} | {}", d.name, d.size, d.contains)
+        }
         "statusbar" => ui.get_status_bar().to_string(),
         "checkboxes" => ui.get_check_boxes().to_string(),
         "dark" => ui.global::<findex_ui::Theme>().get_dark().to_string(),
@@ -187,11 +193,19 @@ fn options() -> findex_ui::OptionsWindow {
     w.expect("app running")
 }
 
+fn properties() -> findex_ui::PropertiesWindow {
+    let mut w = None;
+    crate::app::with_app(|a| w = Some(a.properties_window().clone_strong()));
+    w.expect("app running")
+}
+
 fn check(field_name: &str, actual: &str, want: &str) -> bool {
     match field_name {
         "rows>=" => actual.parse::<usize>().unwrap_or(0) >= want.parse().unwrap_or(usize::MAX),
-        "tabs" | "rows" | "view" | "jobs" | "transfer-window" | "options-window" | "statusbar"
-        | "checkboxes" | "dark" | "transparency" | "name=" => actual == want,
+        "tabs" | "rows" | "view" | "jobs" | "transfer-window" | "options-window"
+        | "properties-window" | "statusbar" | "checkboxes" | "dark" | "transparency" | "name=" => {
+            actual == want
+        }
         _ => actual.contains(want),
     }
 }
@@ -243,9 +257,15 @@ fn step(mut r: Runner) {
             );
             let button = PointerEventButton::Left;
             w.dispatch_event(WindowEvent::PointerMoved { position: a });
-            w.dispatch_event(WindowEvent::PointerPressed { position: a, button });
+            w.dispatch_event(WindowEvent::PointerPressed {
+                position: a,
+                button,
+            });
             w.dispatch_event(WindowEvent::PointerMoved { position: b });
-            w.dispatch_event(WindowEvent::PointerReleased { position: b, button });
+            w.dispatch_event(WindowEvent::PointerReleased {
+                position: b,
+                button,
+            });
         }
         "rclick" => click(
             ui.window(),
@@ -282,11 +302,23 @@ fn step(mut r: Runner) {
                 false,
             )
         }
-        "snap" | "tsnap" | "osnap" => {
-            let (tw, ow) = (transfer(), options());
+        "pclick" => {
+            let pw = properties();
+            click(
+                pw.window(),
+                nums[0],
+                nums[1],
+                rest,
+                PointerEventButton::Left,
+                false,
+            )
+        }
+        "snap" | "tsnap" | "osnap" | "psnap" => {
+            let (tw, ow, pw) = (transfer(), options(), properties());
             let window = match cmd {
                 "tsnap" => tw.window(),
                 "osnap" => ow.window(),
+                "psnap" => pw.window(),
                 _ => ui.window(),
             };
             match window.take_snapshot() {

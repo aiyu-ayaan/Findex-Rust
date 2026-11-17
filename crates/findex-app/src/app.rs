@@ -96,6 +96,10 @@ pub struct App {
     props: PropertiesWindow,
     /// Paths the Properties window acts on.
     props_targets: Vec<PathBuf>,
+    props_thumb: Option<Image>,
+    /// Bumped on every open and close, so late worker results are dropped.
+    props_gen: u64,
+    props_cancel: Cancel,
     /// The transfer window was opened automatically (it then closes itself when everything is done).
     transfer_auto: bool,
     tabs: Vec<Tab>,
@@ -164,8 +168,8 @@ pub fn start(ui: AppWindow, start: Option<PathBuf>) {
     options.on_toggle_default_fm(|| with_app(|app| app.toggle_default_fm()));
     options.on_close_requested(|| with_app(|app| drop(app.options.hide())));
     let props = PropertiesWindow::new().expect("create properties window");
-    props.on_close_requested(|| with_app(|app| drop(app.props.hide())));
-    props.on_set_hidden(|h| with_app(|app| app.props_set_hidden(h)));
+    props.on_close_requested(|| with_app(|app| app.hide_props()));
+    props.on_apply(|n, ro, h| with_app(|app| app.props_apply(n.to_string(), ro, h)));
     let transfer = TransferWindow::new().expect("create transfer window");
     transfer.set_jobs(ModelRc::from(jobs_model.clone()));
     transfer.on_pause(|id| with_app(|app| app.job_pause(id as u64)));
@@ -182,6 +186,9 @@ pub fn start(ui: AppWindow, start: Option<PathBuf>) {
         transfer,
         props,
         props_targets: Vec::new(),
+        props_thumb: None,
+        props_gen: 0,
+        props_cancel: Cancel::default(),
         transfer_auto: false,
         tabs: Vec::new(),
         active: 0,
@@ -533,78 +540,144 @@ impl App {
     /// Opens Properties for the selection, or for the open folder when nothing is selected.
     fn show_properties(&mut self) {
         let sel = self.tab().model.selected_entries();
-        let mut hidden = false;
-        let mut can_hide = self.tab().search.is_none();
-        let details = if sel.is_empty() {
-            can_hide = false;
-            self.props_targets.clear();
-            let mut d = Details::default();
-            if let Some(p) = self.tab().path.clone() {
-                d.count = 1;
-                d.name = p
-                    .file_name()
-                    .map_or_else(
-                        || p.display().to_string(),
-                        |n| n.to_string_lossy().into_owned(),
-                    )
-                    .into();
-                d.type_name = findex_core::Kind::Folder.label().into();
-                d.location = p
-                    .parent()
-                    .map(|p| p.display().to_string())
-                    .unwrap_or_default()
-                    .into();
-                if let Ok(t) = p.metadata().and_then(|m| m.modified()) {
-                    let secs = t
-                        .duration_since(std::time::UNIX_EPOCH)
-                        .map_or(0, |d| d.as_secs() as i64);
-                    d.date = format::date(secs).into();
-                }
-            }
-            d
+        let (targets, can_edit) = if sel.is_empty() {
+            let Some(p) = self.tab().path.clone() else {
+                return;
+            };
+            (vec![p], false)
         } else {
-            self.props_targets = sel.iter().map(|&i| self.tab().model.path_of(i)).collect();
-            let entries = self.tab().model.entries();
-            hidden = sel.iter().all(|&i| entries[i as usize].is_hidden());
-            self.ui.get_details()
+            let paths = sel.iter().map(|&i| self.tab().model.path_of(i)).collect();
+            (paths, self.tab().search.is_none())
         };
-        self.props.set_details(details);
-        self.props.set_hidden(hidden);
-        self.props.set_can_hide(can_hide);
+        let d = self.ui.get_details();
+        self.props_thumb = (sel.len() == 1 && d.has_thumb).then_some(d.thumb);
+        self.props.set_can_edit(can_edit);
+        self.open_props(targets);
         if !self.props.window().is_visible() {
             let _ = self.props.show();
+            self.props.invoke_focus_window();
             Timer::single_shot(Duration::ZERO, || {
                 with_app(|app| apply_effects(app.props.window(), &app.props.global::<Theme>()))
             });
         }
     }
 
-    fn props_set_hidden(&mut self, hidden: bool) {
-        let paths = self.props_targets.clone();
-        if paths.is_empty() {
+    /// Starts gathering properties for `targets` on a worker; stale results are dropped.
+    fn open_props(&mut self, targets: Vec<PathBuf>) {
+        self.props_cancel.cancel();
+        self.props_cancel = Cancel::default();
+        self.props_gen += 1;
+        self.props_targets = targets.clone();
+        self.props.set_data(PropsData::default());
+        self.props.set_dirty(false);
+        let (generation, cancel) = (self.props_gen, self.props_cancel.clone());
+        std::thread::spawn(move || {
+            gather_props(&targets, &cancel, &mut |info| {
+                post(move |app| app.props_update(generation, info))
+            })
+        });
+    }
+
+    fn props_update(&mut self, generation: u64, info: PropsInfo) {
+        if generation != self.props_gen {
             return;
         }
-        self.props.set_hidden(hidden);
+        let first = self.props.get_data().count == 0;
+        let mut d = PropsData {
+            count: info.count,
+            name: info.name.clone().into(),
+            kind: info.kind,
+            is_dir: info.is_dir,
+            type_name: info.type_name.into(),
+            opens_with: info.opens_with.into(),
+            location: info.location.into(),
+            size: info.size.into(),
+            size_on_disk: info.size_on_disk.into(),
+            contains: info.contains.into(),
+            created: info.created.into(),
+            modified: info.modified.into(),
+            accessed: info.accessed.into(),
+            ..Default::default()
+        };
+        if let Some(t) = &self.props_thumb {
+            d.thumb = t.clone();
+            d.has_thumb = true;
+        }
+        self.props.set_data(d);
+        // Reset staged edits once per open; later updates only refresh the counts.
+        if first {
+            self.props.set_name_text(info.name.into());
+            self.props.set_readonly(info.readonly);
+            self.props.set_hidden(info.hidden);
+        }
+    }
+
+    fn props_apply(&mut self, name: String, readonly: i32, hidden: i32) {
+        let targets = self.props_targets.clone();
+        let name = name.trim().to_string();
+        let rename = targets.len() == 1
+            && targets[0]
+                .file_name()
+                .is_some_and(|n| n.to_string_lossy() != name);
+        if rename && !valid_name(&name) {
+            return self.toast(
+                "A file name can't be empty or contain a path separator.".into(),
+                false,
+            );
+        }
+        self.props.set_dirty(false);
         std::thread::spawn(move || {
-            let mut names = Vec::new();
+            let mut out = Vec::new();
             let mut err = None;
-            for p in &paths {
-                match findex_platform::set_hidden(p, hidden) {
-                    Ok(n) => {
-                        names.extend(n.file_name().map(|f| f.to_os_string()));
+            for mut p in targets {
+                let r = (|| {
+                    if rename {
+                        let to = p.with_file_name(&name);
+                        if std::fs::symlink_metadata(&to).is_ok() {
+                            return Err(std::io::Error::other(format!(
+                                "There is already a file named '{name}' here."
+                            )));
+                        }
+                        std::fs::rename(&p, &to)?;
+                        p = to;
                     }
-                    Err(e) => err = Some(e),
+                    if hidden != 2 {
+                        p = findex_platform::set_hidden(&p, hidden == 1)?;
+                    }
+                    if readonly != 2 {
+                        findex_platform::set_readonly(&p, readonly == 1)?;
+                    }
+                    Ok(())
+                })();
+                if let Err(e) = r {
+                    err = Some(e);
                 }
+                out.push(p);
             }
             post(move |app| {
                 if let Some(e) = err {
-                    app.props.set_hidden(!hidden);
                     app.toast(format!("{e}"), false);
                 }
-                app.tab_mut().pending_select = names;
+                app.tab_mut().pending_select = out
+                    .iter()
+                    .filter_map(|p| p.file_name().map(|n| n.to_os_string()))
+                    .collect();
                 app.load();
+                if app.props.window().is_visible() {
+                    app.open_props(out);
+                }
             });
         });
+    }
+
+    fn hide_props(&mut self) {
+        self.props_cancel.cancel();
+        self.props_gen += 1;
+        let _ = self.props.hide();
+    }
+
+    pub fn properties_window(&self) -> &PropertiesWindow {
+        &self.props
     }
 
     // ---------------- transfer window ----------------
@@ -2046,11 +2119,7 @@ impl App {
         let Some(&idx) = sel.first() else { return };
         let from = self.tab().model.path_of(idx);
         let name = name.trim().to_string();
-        if name.is_empty()
-            || name == "."
-            || name == ".."
-            || name.chars().any(std::path::is_separator)
-        {
+        if !valid_name(&name) {
             return self.toast(
                 "A file name can't be empty or contain a path separator.".into(),
                 false,
@@ -2206,6 +2275,10 @@ impl App {
             }
             if lower == "d" {
                 self.ui.invoke_edit_path();
+                return true;
+            }
+            if text == "\n" || text == "\r" {
+                self.show_properties();
                 return true;
             }
         }
@@ -2420,6 +2493,192 @@ fn job_title(j: &Job) -> String {
         JobKind::Trash => format!("Moving {what} to Trash"),
         JobKind::Delete => format!("Deleting {what}"),
     }
+}
+
+fn valid_name(name: &str) -> bool {
+    !name.is_empty() && name != "." && name != ".." && !name.chars().any(std::path::is_separator)
+}
+
+/// Properties gathered off the UI thread (`slint::Image` is not `Send`, so the thumb is added later).
+#[derive(Clone, Default)]
+struct PropsInfo {
+    count: i32,
+    name: String,
+    kind: i32,
+    is_dir: bool,
+    type_name: String,
+    opens_with: String,
+    location: String,
+    size: String,
+    size_on_disk: String,
+    contains: String,
+    created: String,
+    modified: String,
+    accessed: String,
+    /// 0 off, 1 on, 2 mixed
+    readonly: i32,
+    hidden: i32,
+}
+
+/// "1.2 MB (1,234,567 bytes)"
+fn size_with_bytes(bytes: u64) -> String {
+    let digits = bytes.to_string();
+    let mut grouped = String::new();
+    for (i, c) in digits.chars().enumerate() {
+        if i > 0 && (digits.len() - i).is_multiple_of(3) {
+            grouped.push(',');
+        }
+        grouped.push(c);
+    }
+    if bytes < 1024 {
+        format!("{grouped} bytes")
+    } else {
+        format!("{} ({grouped} bytes)", format::size(bytes))
+    }
+}
+
+fn time_text(t: std::io::Result<std::time::SystemTime>) -> String {
+    t.ok()
+        .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+        .map(|d| format::date(d.as_secs() as i64))
+        .unwrap_or_default()
+}
+
+/// Reads properties of `targets` and walks folders for size and contents, never following symlinks.
+/// Calls `sink` with partial results about every 250 ms, then with the final result.
+fn gather_props(targets: &[PathBuf], cancel: &Cancel, sink: &mut dyn FnMut(PropsInfo)) {
+    let single = targets.len() == 1;
+    let metas: Vec<_> = targets
+        .iter()
+        .map(|p| std::fs::symlink_metadata(p).ok())
+        .collect();
+    let tri = |f: &dyn Fn(usize) -> bool| {
+        let on = (0..targets.len()).filter(|&i| f(i)).count();
+        if on == 0 {
+            0
+        } else if on == targets.len() {
+            1
+        } else {
+            2
+        }
+    };
+    let mut base = PropsInfo {
+        count: targets.len() as i32,
+        readonly: tri(&|i| metas[i].as_ref().is_some_and(findex_platform::is_readonly)),
+        hidden: tri(&|i| findex_platform::is_hidden(&targets[i])),
+        ..Default::default()
+    };
+    let kind_of = |i: usize| {
+        if metas[i].as_ref().is_some_and(|m| m.is_dir()) {
+            findex_core::Kind::Folder
+        } else {
+            findex_core::Kind::from_name(
+                &targets[i].file_name().unwrap_or_default().to_string_lossy(),
+            )
+        }
+    };
+    let parent = |p: &PathBuf| {
+        p.parent()
+            .map(|p| p.display().to_string())
+            .unwrap_or_default()
+    };
+    if single {
+        let p = &targets[0];
+        let kind = kind_of(0);
+        base.name = p.file_name().map_or_else(
+            || p.display().to_string(),
+            |n| n.to_string_lossy().into_owned(),
+        );
+        base.kind = kind as i32;
+        base.is_dir = kind == findex_core::Kind::Folder;
+        base.type_name = kind.label().into();
+        base.location = parent(p);
+        if let Some(m) = &metas[0] {
+            base.created = time_text(m.created());
+            base.modified = time_text(m.modified());
+            base.accessed = time_text(m.accessed());
+        }
+        if !base.is_dir {
+            base.opens_with = findex_platform::default_app_name(p).unwrap_or_default();
+        }
+    } else {
+        let first = kind_of(0);
+        base.type_name = if (1..targets.len()).all(|i| kind_of(i) == first) {
+            format!("All of type {}", first.label())
+        } else {
+            "Multiple types".into()
+        };
+        let loc = parent(&targets[0]);
+        if targets.iter().all(|p| parent(p) == loc) {
+            base.location = format!("All in {loc}");
+        }
+    }
+
+    let (mut bytes, mut alloc, mut files, mut folders) = (0u64, 0u64, 0u64, 0u64);
+    let mut has_alloc = true;
+    let mut stack = Vec::new();
+    for (p, m) in targets.iter().zip(&metas) {
+        let Some(m) = m else { continue };
+        if m.is_dir() {
+            stack.push(p.clone());
+            folders += !single as u64;
+        } else {
+            files += !single as u64;
+            bytes += m.len();
+            match findex_platform::allocated_size(m) {
+                Some(a) => alloc += a,
+                None => has_alloc = false,
+            }
+        }
+    }
+    let any_dir = !stack.is_empty();
+    let mut last = Instant::now();
+    let emit = |bytes: u64, alloc: u64, files: u64, folders: u64, has_alloc: bool| PropsInfo {
+        size: size_with_bytes(bytes),
+        size_on_disk: if has_alloc {
+            size_with_bytes(alloc)
+        } else {
+            String::new()
+        },
+        contains: if any_dir || !single {
+            format!(
+                "{files} File{}, {folders} Folder{}",
+                if files == 1 { "" } else { "s" },
+                if folders == 1 { "" } else { "s" }
+            )
+        } else {
+            String::new()
+        },
+        ..base.clone()
+    };
+    while let Some(dir) = stack.pop() {
+        if cancel.is_cancelled() {
+            return;
+        }
+        let Ok(rd) = std::fs::read_dir(&dir) else {
+            continue;
+        };
+        for e in rd.flatten() {
+            // DirEntry::metadata does not follow symlinks.
+            let Ok(m) = e.metadata() else { continue };
+            if m.is_dir() {
+                folders += 1;
+                stack.push(e.path());
+            } else {
+                files += 1;
+                bytes += m.len();
+                match findex_platform::allocated_size(&m) {
+                    Some(a) => alloc += a,
+                    None => has_alloc = false,
+                }
+            }
+        }
+        if last.elapsed() >= Duration::from_millis(250) {
+            last = Instant::now();
+            sink(emit(bytes, alloc, files, folders, has_alloc));
+        }
+    }
+    sink(emit(bytes, alloc, files, folders, has_alloc));
 }
 
 /// Graph size in pixels; must match `GraphMetrics` in transfer.slint.

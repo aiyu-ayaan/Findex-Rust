@@ -74,3 +74,22 @@ expect toast Moved 1 item
 expect rows 1
 key alt+Left
 expect rows 16
+# Properties (Alt+Enter): a separate window with folder contents counted off the UI thread
+key Home
+type gamma
+key alt+Return
+expect properties-window true
+expect properties Gamma
+expect properties 1 File, 2 Folders
+wait 300
+psnap 37-properties-folder
+# Hidden + Apply renames to a dotfile on Linux; a second Apply in the same window must act on the new path
+pclick 308 433
+pclick 380 572
+expect properties .Gamma
+pclick 308 433
+pclick 380 572
+expect properties Gamma |
+expect rows 16
+pclick 275 572
+expect properties-window false

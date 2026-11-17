@@ -11,9 +11,9 @@ import { NavPane, StatusBar, DetailsPane, ThisPcPage } from "panes.slint";
 import { Dialog, Toast } from "overlays.slint";
 import { TransferWindow } from "transfer.slint";
 import { OptionsWindow, Options } from "options.slint";
-import { PropertiesWindow } from "properties.slint";
+import { PropertiesWindow, PropsData } from "properties.slint";
 
-export { TransferWindow, OptionsWindow, PropertiesWindow, Options, Theme, Palette, FileRow, TabData, Crumb, NavItem, DriveData, JobData, Details }
+export { TransferWindow, OptionsWindow, PropertiesWindow, PropsData, Options, Theme, Palette, FileRow, TabData, Crumb, NavItem, DriveData, JobData, Details }
 
 component CheckRow inherits MenuRow {
     in property <bool> checked;

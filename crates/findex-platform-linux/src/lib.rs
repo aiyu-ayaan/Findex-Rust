@@ -79,6 +79,78 @@ pub fn set_hidden(path: &Path, hidden: bool) -> std::io::Result<PathBuf> {
     std::fs::rename(path, &to).map(|_| to)
 }
 
+/// Dotfiles are hidden on Linux.
+pub fn is_hidden(path: &Path) -> bool {
+    path.file_name()
+        .is_some_and(|n| std::os::unix::ffi::OsStrExt::as_bytes(n).starts_with(b"."))
+}
+
+/// Read-only means the owner cannot write.
+pub fn is_readonly(meta: &std::fs::Metadata) -> bool {
+    use std::os::unix::fs::PermissionsExt;
+    meta.permissions().mode() & 0o200 == 0
+}
+
+/// Sets or clears the owner write bit only. `Permissions::set_readonly(false)` would make the file
+/// writable by everyone.
+pub fn set_readonly(path: &Path, readonly: bool) -> std::io::Result<()> {
+    use std::os::unix::fs::PermissionsExt;
+    let mut perm = std::fs::symlink_metadata(path)?.permissions();
+    let mode = perm.mode();
+    let new = if readonly {
+        mode & !0o222
+    } else {
+        mode | 0o200
+    };
+    if new != mode {
+        perm.set_mode(new);
+        std::fs::set_permissions(path, perm)?;
+    }
+    Ok(())
+}
+
+/// Bytes allocated on disk.
+pub fn allocated_size(meta: &std::fs::Metadata) -> Option<u64> {
+    use std::os::unix::fs::MetadataExt;
+    Some(meta.blocks() * 512)
+}
+
+/// Display name of the app that opens `path` by default ("Text Editor").
+pub fn default_app_name(path: &Path) -> Option<String> {
+    let path = path.to_path_buf();
+    with_timeout(Duration::from_millis(1500), move || {
+        let query = |args: &[&std::ffi::OsStr]| {
+            Command::new("xdg-mime")
+                .arg("query")
+                .args(args)
+                .stderr(Stdio::null())
+                .output()
+                .ok()
+                .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
+                .filter(|s| !s.is_empty())
+        };
+        let mime = query(&["filetype".as_ref(), path.as_os_str()])?;
+        let desktop = query(&["default".as_ref(), mime.as_ref()])?;
+        let dirs = std::iter::once(dirs::data_dir()).flatten().chain(
+            std::env::var("XDG_DATA_DIRS")
+                .unwrap_or_else(|_| "/usr/local/share:/usr/share".into())
+                .split(':')
+                .map(PathBuf::from)
+                .collect::<Vec<_>>(),
+        );
+        for d in dirs {
+            if let Ok(text) = std::fs::read_to_string(d.join("applications").join(&desktop)) {
+                return text
+                    .lines()
+                    .find_map(|l| l.strip_prefix("Name="))
+                    .map(str::to_string);
+            }
+        }
+        Some(desktop.trim_end_matches(".desktop").to_string())
+    })
+    .flatten()
+}
+
 /// Native window backdrop (Mica). Not available on Linux; the UI draws its own translucency.
 pub fn apply_window_effects(_handle: raw_window_handle::RawWindowHandle, _dark: bool) -> bool {
     false

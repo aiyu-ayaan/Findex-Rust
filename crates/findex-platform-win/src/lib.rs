@@ -286,6 +286,36 @@ pub fn set_hidden(path: &Path, hidden: bool) -> io::Result<PathBuf> {
     Ok(path.to_path_buf())
 }
 
+pub fn is_hidden(path: &Path) -> bool {
+    let a = unsafe { GetFileAttributesW(wide(path.as_os_str()).as_ptr()) };
+    a != INVALID_FILE_ATTRIBUTES && a & FILE_ATTRIBUTE_HIDDEN != 0
+}
+
+pub fn is_readonly(meta: &std::fs::Metadata) -> bool {
+    meta.permissions().readonly()
+}
+
+/// FILE_ATTRIBUTE_READONLY; on Windows `set_readonly` touches only that attribute.
+pub fn set_readonly(path: &Path, readonly: bool) -> io::Result<()> {
+    let mut perm = std::fs::symlink_metadata(path)?.permissions();
+    if perm.readonly() != readonly {
+        #[allow(clippy::permissions_set_readonly_false)]
+        perm.set_readonly(readonly);
+        std::fs::set_permissions(path, perm)?;
+    }
+    Ok(())
+}
+
+/// shortcut: not reported yet, use GetCompressedFileSizeW plus cluster rounding when needed.
+pub fn allocated_size(_meta: &std::fs::Metadata) -> Option<u64> {
+    None
+}
+
+/// shortcut: not reported yet, use AssocQueryStringW(ASSOCSTR_FRIENDLYAPPNAME) when needed.
+pub fn default_app_name(_path: &Path) -> Option<String> {
+    None
+}
+
 /// Windows 11 Mica backdrop plus dark title chrome. Returns false where unsupported (Windows 10).
 /// [?] verify on Windows 11 22H2+ that Slint's transparent surface shows the backdrop (spike S1).
 pub fn apply_window_effects(handle: raw_window_handle::RawWindowHandle, dark: bool) -> bool {
