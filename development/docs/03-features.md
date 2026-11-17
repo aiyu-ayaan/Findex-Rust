@@ -59,6 +59,7 @@ Request: "Copy and paste same panel". Interpretation used here: copy, cut, paste
 - Clipboard interop so copy in Findex pastes in other file managers and the reverse:
   - Windows: `CF_HDROP` plus the `Preferred DropEffect` format (copy vs cut). **[K]**
   - Linux: `text/uri-list` plus `x-special/gnome-copied-files` (GNOME/Nautilus convention) and `application/x-kde-cutselection` (KDE). **[K]**
+  - Implemented (Linux): `x-special/gnome-copied-files` only, through `wl-copy`/`wl-paste` or `xclip` (must be installed; without them Findex keeps its own clipboard). Ctrl+V asks the system clipboard first, then falls back to the internal one. `text/uri-list` and the KDE cut flag are not published (one target per owner), so Dolphin sees copies but not cuts. The menu Paste item is enabled only by an in-app copy; Ctrl+V also pastes files copied elsewhere. Windows `CF_HDROP` is open.
 - Drag and drop between tabs, windows and other apps. Default action rules follow Windows: same volume moves, different volume copies, modifiers override, drop target shows a hint ("Move to Documents").
 - **Transfer panel** (single window or docked pane, one per application):
   - One row per job with source, destination, progress bar, speed, time remaining, items done.

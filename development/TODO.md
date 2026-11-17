@@ -58,7 +58,7 @@ Legend: `[ ]` open, `[x]` done. P0 = v1.0 blocker, P1 = v1.0 target, P2 = later.
 
 ## M3 Operations (P0)
 
-- [ ] Clipboard interop (Windows `CF_HDROP`, Linux uri-list plus gnome/kde cut formats)
+- [ ] Clipboard interop (Linux gnome-copied-files via xclip/wl-clipboard done; text/uri-list, KDE cut flag and Windows `CF_HDROP` open)
 - [ ] Drag and drop inside app and with other apps
 - [x] Mouse side buttons (back / forward) and Esc closes the Options window
 - [x] Unified transfer panel with graph, pause, resume, cancel (separate window)

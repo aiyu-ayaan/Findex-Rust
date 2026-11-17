@@ -1467,8 +1467,12 @@ impl App {
         if paths.is_empty() {
             return;
         }
-        self.clipboard = Some((paths, cut));
+        self.clipboard = Some((paths.clone(), cut));
         self.ui.set_can_paste(true);
+        // Share with other file managers; the internal copy above stays the fallback.
+        std::thread::spawn(move || {
+            findex_platform::set_clipboard_files(&paths, cut);
+        });
     }
 
     fn copy_path(&mut self) {
@@ -1487,19 +1491,25 @@ impl App {
     }
 
     fn paste(&mut self) {
-        let (Some((paths, cut)), Some(dest)) = (self.clipboard.clone(), self.tab().path.clone())
-        else {
-            return;
-        };
+        let Some(dest) = self.tab().path.clone() else { return };
         if self.tab().search.is_some() {
             return;
         }
-        let kind = if cut { JobKind::Move } else { JobKind::Copy };
-        if cut {
-            self.clipboard = None;
-            self.ui.set_can_paste(false);
-        }
-        self.submit(kind, paths, Some(dest));
+        // Another app may own the clipboard: ask the system first, then fall back to ours.
+        let ours = self.clipboard.clone();
+        std::thread::spawn(move || {
+            let system = findex_platform::get_clipboard_files()
+                .map(|(uris, cut)| (uris.iter().map(|u| crate::parse_location(u)).collect::<Vec<_>>(), cut));
+            post(move |app| {
+                let Some((paths, cut)) = system.or(ours) else { return };
+                if cut {
+                    app.clipboard = None;
+                    app.ui.set_can_paste(false);
+                }
+                let kind = if cut { JobKind::Move } else { JobKind::Copy };
+                app.submit(kind, paths, Some(dest));
+            });
+        });
     }
 
     fn delete(&mut self, permanent: bool, ask: bool) {

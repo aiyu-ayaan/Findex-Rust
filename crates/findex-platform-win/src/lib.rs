@@ -364,3 +364,12 @@ pub fn device_id(path: &Path) -> u64 {
         _ => 0,
     }
 }
+
+/// File clipboard shared with other apps (`CF_HDROP`): still open on Windows, so Findex uses its own clipboard there.
+pub fn set_clipboard_files(_paths: &[PathBuf], _cut: bool) -> bool {
+    false
+}
+
+pub fn get_clipboard_files() -> Option<(Vec<String>, bool)> {
+    None
+}
