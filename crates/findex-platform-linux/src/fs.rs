@@ -144,6 +144,14 @@ pub fn copy_symlink(src: &Path, dst: &Path) -> io::Result<()> {
     std::os::unix::fs::symlink(std::fs::read_link(src)?, dst)
 }
 
+/// Filesystem id (`st_dev`) of `path`, or of its nearest existing parent. Used to queue jobs per device.
+pub fn device_id(path: &Path) -> u64 {
+    use std::os::unix::fs::MetadataExt;
+    path.ancestors()
+        .find_map(|p| std::fs::metadata(p).ok())
+        .map_or(0, |m| m.dev())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -179,12 +187,4 @@ mod tests {
         // destination exists: refuse, never overwrite
         assert!(copy_file(&dir.path().join("a.txt"), &dst, &mut |_| true).is_err());
     }
-}
-
-/// Filesystem id (`st_dev`) of `path`, or of its nearest existing parent. Used to queue jobs per device.
-pub fn device_id(path: &Path) -> u64 {
-    use std::os::unix::fs::MetadataExt;
-    path.ancestors()
-        .find_map(|p| std::fs::metadata(p).ok())
-        .map_or(0, |m| m.dev())
 }

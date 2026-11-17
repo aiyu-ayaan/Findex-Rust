@@ -24,7 +24,8 @@ pub fn background_command(program: &str) -> std::process::Command {
     use std::os::windows::process::CommandExt;
     const CREATE_NO_WINDOW: u32 = 0x0800_0000;
     let mut c = std::process::Command::new(program);
-    c.stdin(std::process::Stdio::null()).creation_flags(CREATE_NO_WINDOW);
+    c.stdin(std::process::Stdio::null())
+        .creation_flags(CREATE_NO_WINDOW);
     c
 }
 
