@@ -91,7 +91,7 @@ Priority: optional
 Architecture: amd64
 Depends: libc6 (>= 2.31), libfontconfig1, libfreetype6, libxkbcommon0, libgl1
 Maintainer: aiyu-ayaan <noreply@github.com>
-Homepage: https://github.com/aiyu-ayaan/Switchboard-Rust
+Homepage: https://github.com/aiyu-ayaan/Findex-Rust
 Description: Fast file explorer with the Windows 11 look
  Tabs, every Explorer view mode, fuzzy search, thumbnails and one transfer
  window for copy, move and delete. Can be set as the default file manager.
