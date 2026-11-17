@@ -24,9 +24,17 @@ fn version_key(text: &str) -> Option<[u64; 5]> {
         Some((c, p)) => (c, Some(p)),
         None => (t, None),
     };
-    let num = |s: &str| -> Option<u64> { s.bytes().all(|b| b.is_ascii_digit()).then(|| s.parse().ok())? };
+    let num = |s: &str| -> Option<u64> {
+        s.bytes()
+            .all(|b| b.is_ascii_digit())
+            .then(|| s.parse().ok())?
+    };
     let mut parts = core.split('.');
-    let (a, b, c) = (num(parts.next()?)?, num(parts.next()?)?, num(parts.next()?)?);
+    let (a, b, c) = (
+        num(parts.next()?)?,
+        num(parts.next()?)?,
+        num(parts.next()?)?,
+    );
     if parts.next().is_some() {
         return None;
     }
@@ -34,7 +42,10 @@ fn version_key(text: &str) -> Option<[u64; 5]> {
         None => (2, u64::MAX),
         Some(p) => {
             let (name, n) = p.split_once('.')?;
-            (CHANNELS[..2].iter().position(|c| *c == name)? as u64, num(n)?)
+            (
+                CHANNELS[..2].iter().position(|c| *c == name)? as u64,
+                num(n)?,
+            )
         }
     };
     Some([a, b, c, stage, n])
@@ -69,12 +80,21 @@ pub struct Offer {
 
 /// The newest release on `channel` (which also takes every steadier one) that is newer than
 /// `installed` and has an asset ending in `suffix`. Releases without one are passed over.
-fn pick(releases: &serde_json::Value, installed: &str, channel: i32, suffix: &str) -> Option<Offer> {
+fn pick(
+    releases: &serde_json::Value,
+    installed: &str,
+    channel: i32,
+    suffix: &str,
+) -> Option<Offer> {
     let current = version_key(installed)?;
     let mut best: Option<([u64; 5], Offer)> = None;
     for r in releases.as_array()? {
-        let Some(tag) = r["tag_name"].as_str() else { continue };
-        let Some(key) = version_key(tag) else { continue };
+        let Some(tag) = r["tag_name"].as_str() else {
+            continue;
+        };
+        let Some(key) = version_key(tag) else {
+            continue;
+        };
         if (key[3] as i32) < channel || key <= best.as_ref().map_or(current, |b| b.0) {
             continue;
         }
@@ -83,7 +103,9 @@ fn pick(releases: &serde_json::Value, installed: &str, channel: i32, suffix: &st
             .into_iter()
             .flatten()
             .find(|a| a["name"].as_str().is_some_and(|n| n.ends_with(suffix)));
-        let Some(url) = asset.and_then(|a| a["browser_download_url"].as_str()) else { continue };
+        let Some(url) = asset.and_then(|a| a["browser_download_url"].as_str()) else {
+            continue;
+        };
         let offer = Offer {
             version: tag.trim_start_matches('v').to_string(),
             url: url.to_string(),
@@ -119,7 +141,13 @@ pub fn check(channel: i32) -> Result<Option<Offer>, String> {
         return Ok(None);
     }
     let out = curl()
-        .args(["--max-time", "30", "-H", "Accept: application/vnd.github+json", RELEASES])
+        .args([
+            "--max-time",
+            "30",
+            "-H",
+            "Accept: application/vnd.github+json",
+            RELEASES,
+        ])
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .output()
@@ -130,9 +158,13 @@ pub fn check(channel: i32) -> Result<Option<Offer>, String> {
             String::from_utf8_lossy(&out.stderr).trim()
         ));
     }
-    let json: serde_json::Value =
-        serde_json::from_slice(&out.stdout).map_err(|e| format!("GitHub sent an unreadable answer: {e}"))?;
-    let suffix = if self_install() { ".AppImage" } else { findex_platform::UPDATE_ASSET };
+    let json: serde_json::Value = serde_json::from_slice(&out.stdout)
+        .map_err(|e| format!("GitHub sent an unreadable answer: {e}"))?;
+    let suffix = if self_install() {
+        ".AppImage"
+    } else {
+        findex_platform::UPDATE_ASSET
+    };
     Ok(pick(&json, VERSION, channel, suffix))
 }
 
@@ -172,7 +204,9 @@ pub fn install(offer: &Offer, progress: &dyn Fn(f32)) -> Result<Installed, Strin
             if !elf {
                 return Err("the download is not an AppImage".into());
             }
-            let perms = std::fs::metadata(old).map_err(|e| e.to_string())?.permissions();
+            let perms = std::fs::metadata(old)
+                .map_err(|e| e.to_string())?
+                .permissions();
             std::fs::set_permissions(&part, perms).map_err(|e| e.to_string())?;
         }
         // A rename within one folder: a failure before it leaves the old build in place.
@@ -211,7 +245,10 @@ fn download(offer: &Offer, part: &Path, progress: &dyn Fn(f32)) -> Result<(), St
         return Err("the download failed".into());
     }
     if offer.size != 0 && got != offer.size {
-        return Err(format!("the download is incomplete ({got} of {} bytes)", offer.size));
+        return Err(format!(
+            "the download is incomplete ({got} of {} bytes)",
+            offer.size
+        ));
     }
     progress(1.0);
     Ok(())
@@ -229,7 +266,12 @@ mod tests {
         serde_json::json!({ "tag_name": format!("v{tag}"), "assets": assets, "body": "notes" })
     }
 
-    fn picked(releases: &serde_json::Value, installed: &str, channel: i32, suffix: &str) -> Option<(String, String)> {
+    fn picked(
+        releases: &serde_json::Value,
+        installed: &str,
+        channel: i32,
+        suffix: &str,
+    ) -> Option<(String, String)> {
         pick(releases, installed, channel, suffix).map(|o| (o.version, o.url))
     }
 
@@ -243,10 +285,19 @@ mod tests {
             release("0.0.3", &["d.apk"]),
         ]);
         let p = |v: &str, u: &str| Some((v.to_string(), u.to_string()));
-        assert_eq!(picked(&rs, "0.0.1-alpha.1", 0, ".AppImage"), p("0.0.2-alpha.1", "u/a.AppImage"));
+        assert_eq!(
+            picked(&rs, "0.0.1-alpha.1", 0, ".AppImage"),
+            p("0.0.2-alpha.1", "u/a.AppImage")
+        );
         // Beta takes the stable release too; the alpha is not for it, and 0.0.3 has no desktop build.
-        assert_eq!(picked(&rs, "0.0.1-beta.2", 1, ".AppImage"), p("0.0.1", "u/b.AppImage"));
-        assert_eq!(picked(&rs, "0.0.1-beta.2", 1, "_amd64.deb"), p("0.0.1", "u/b_amd64.deb"));
+        assert_eq!(
+            picked(&rs, "0.0.1-beta.2", 1, ".AppImage"),
+            p("0.0.1", "u/b.AppImage")
+        );
+        assert_eq!(
+            picked(&rs, "0.0.1-beta.2", 1, "_amd64.deb"),
+            p("0.0.1", "u/b_amd64.deb")
+        );
         assert_eq!(picked(&rs, "0.0.1", 2, ".AppImage"), None);
         assert_eq!(picked(&rs, "not-a-version", 0, ".AppImage"), None);
         let full = pick(&rs, "0.0.1-alpha.1", 0, ".AppImage").unwrap();

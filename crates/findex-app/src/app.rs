@@ -2256,16 +2256,18 @@ impl App {
         self.update_checking = false;
         self.options.set_update_checking(false);
         let status = match &r {
-            _ if update::is_dev() => "This is a development build. It updates by rebuilding from source.".into(),
+            _ if update::is_dev() => {
+                "This is a development build. It updates by rebuilding from source.".into()
+            }
             Ok(Some(o)) => format!("Findex {} is available.", o.version),
             Ok(None) => "Findex is up to date.".into(),
             Err(e) => format!("Could not check for updates: {e}."),
         };
         self.options.set_update_status(status.into());
         let offer = r.ok().flatten();
-        let (version, notes) = offer
-            .as_ref()
-            .map_or((String::new(), String::new()), |o| (o.version.clone(), o.notes.clone()));
+        let (version, notes) = offer.as_ref().map_or((String::new(), String::new()), |o| {
+            (o.version.clone(), o.notes.clone())
+        });
         self.options.set_update_found(version.into());
         self.options.set_update_notes(notes.into());
         if at_start
