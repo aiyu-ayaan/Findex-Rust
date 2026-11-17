@@ -30,6 +30,8 @@ pub struct Inner {
     /// Focused display row and selection anchor.
     pub focus: Option<usize>,
     pub anchor: Option<usize>,
+    /// Selection at the start of a rubber-band drag, by entry index (empty without Ctrl/Shift).
+    pub band_base: Vec<bool>,
 }
 
 pub struct ListingModel {
@@ -274,6 +276,40 @@ impl ListingModel {
         self.changed(changed);
     }
 
+    /// Rubber-band drag start: remembers what stays selected (`additive`: Ctrl/Shift) and drops the rest.
+    pub fn band_begin(&self, additive: bool) {
+        {
+            let mut i = self.inner.borrow_mut();
+            i.band_base = if additive { i.selected.clone() } else { Vec::new() };
+        }
+        if !additive {
+            self.clear_selection();
+        }
+    }
+
+    /// Selects the cells in `rows` x `cols` (grid of `ncols` columns; 1 for the details list) plus the
+    /// band base. Out-of-range or inverted ranges select nothing.
+    pub fn band_select(&self, rows: (i32, i32), cols: (i32, i32), ncols: i32) {
+        let changed = {
+            let mut guard = self.inner.borrow_mut();
+            let i = &mut *guard;
+            let ncols = ncols.max(1) as usize;
+            let mut changed = Vec::new();
+            for r in 0..i.order.len() {
+                let (line, col) = ((r / ncols) as i32, (r % ncols) as i32);
+                let hit = (rows.0..=rows.1).contains(&line) && (cols.0..=cols.1).contains(&col);
+                let idx = i.order[r] as usize;
+                let want = hit || i.band_base.get(idx).copied().unwrap_or(false);
+                if i.selected[idx] != want {
+                    i.selected[idx] = want;
+                    changed.push(r);
+                }
+            }
+            changed
+        };
+        self.changed(changed);
+    }
+
     pub fn select_all(&self) {
         {
             let mut guard = self.inner.borrow_mut();
@@ -446,5 +482,28 @@ mod tests {
         assert_eq!(display_name(&e("photo.png"), false), "photo.png");
         assert_eq!(display_name(&e("data.xyz"), true), "data.xyz");
         assert_eq!(display_name(&e(".bashrc"), true), ".bashrc");
+    }
+
+    fn model(n: usize) -> ListingModel {
+        let m = ListingModel::new(findex_thumbs::Service::new(1, std::env::temp_dir(), |_, _, _| {}));
+        let entries = (0..n).map(|k| Entry::new(format!("f{k}").into(), false, 0, 0, 0)).collect();
+        m.set_all(entries, (0..n as u32).collect());
+        m
+    }
+
+    #[test]
+    fn band_selects_grid_cells_and_keeps_base_when_additive() {
+        let m = model(10); // 4 columns: rows of 0-3, 4-7, 8-9
+        m.click(0, false, false);
+        m.band_begin(true);
+        m.band_select((1, 1), (1, 2), 4);
+        assert_eq!(m.selected_entries(), vec![0, 5, 6]);
+        m.band_select((1, 2), (3, 3), 4); // shrink and move: 7 and 11 (missing)
+        assert_eq!(m.selected_entries(), vec![0, 7]);
+        m.band_begin(false);
+        m.band_select((0, 0), (0, 0), 4);
+        assert_eq!(m.selected_entries(), vec![0]);
+        m.band_select((1, 0), (0, 0), 4); // inverted: nothing
+        assert!(m.selected_entries().is_empty());
     }
 }
