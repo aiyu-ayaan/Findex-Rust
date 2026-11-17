@@ -21,6 +21,35 @@ fn dbus_service_file() -> Option<PathBuf> {
     dirs::data_dir().map(|d| d.join("dbus-1/services/org.freedesktop.FileManager1.service"))
 }
 
+const GNOME_SCHEMA: &str = "org.gnome.settings-daemon.plugins.media-keys";
+
+fn gsettings(args: &[&str]) -> Option<String> {
+    let out = Command::new("gsettings").args(args).output().ok()?;
+    out.status.success().then(|| String::from_utf8_lossy(&out.stdout).trim().to_string())
+}
+
+/// GNOME: makes sure `<Super>e` opens the home folder (and so the default file manager).
+/// The old value is saved first, so `--repair` can restore it. No-op off GNOME.
+fn bind_super_e() {
+    let Some(cur) = gsettings(&["get", GNOME_SCHEMA, "home"]) else { return };
+    if cur.contains("<Super>e") {
+        return;
+    }
+    let saved = backup_file().with_file_name("previous-home-key");
+    let _ = std::fs::create_dir_all(saved.parent().unwrap());
+    let _ = std::fs::write(&saved, &cur);
+    let new = if cur.contains("[]") { "['<Super>e']".to_string() } else { cur.replacen('[', "['<Super>e', ", 1) };
+    gsettings(&["set", GNOME_SCHEMA, "home", &new]);
+}
+
+fn restore_super_e() {
+    let saved = backup_file().with_file_name("previous-home-key");
+    if let Ok(prev) = std::fs::read_to_string(&saved) {
+        gsettings(&["set", GNOME_SCHEMA, "home", prev.trim()]);
+        let _ = std::fs::remove_file(saved);
+    }
+}
+
 fn query_default() -> Option<String> {
     let out = Command::new("xdg-mime")
         .args(["query", "default", "inode/directory"])
@@ -73,6 +102,7 @@ pub fn set_default_file_manager(enable: bool) -> io::Result<String> {
             std::fs::write(&backup, prev)?;
         }
         set_mime_default(DESKTOP_ID)?;
+        bind_super_e();
         if let Some(f) = dbus_service_file() {
             std::fs::create_dir_all(f.parent().unwrap())?;
             std::fs::write(
@@ -89,6 +119,7 @@ pub fn set_default_file_manager(enable: bool) -> io::Result<String> {
             .unwrap_or_else(|_| "org.gnome.Nautilus.desktop".into());
         set_mime_default(prev.trim())?;
         let _ = std::fs::remove_file(&backup);
+        restore_super_e();
         if let Some(f) = dbus_service_file() {
             let _ = std::fs::remove_file(f);
         }
