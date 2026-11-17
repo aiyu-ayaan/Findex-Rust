@@ -2,6 +2,7 @@
 # Install, update or remove Findex on Linux (x86_64), for this user, no root.
 #
 #   curl -fsSL https://raw.githubusercontent.com/aiyu-ayaan/Switchboard-Rust/master/scripts/install-linux.sh | sh
+#                                     newest stable build; if there is none, the newest beta, then alpha
 #   ... | sh -s -- --channel beta     beta builds (and stable ones)
 #   ... | sh -s -- --version 0.0.1    a specific release
 #   ... | sh -s -- --uninstall        remove it (settings stay in ~/.config/findex)
@@ -23,7 +24,7 @@ DESKTOP_FILE="$DATA_HOME/applications/findex.desktop"
 ICON_SIZES="16 24 32 48 64 128 256 512"
 ICON_DIR="$DATA_HOME/icons/hicolor"
 
-CHANNEL=stable
+CHANNEL=""  # empty: take the steadiest channel that has a build
 VERSION=""
 FROM_FILE=""
 UNINSTALL=0
@@ -42,7 +43,7 @@ while [ $# -gt 0 ]; do
     *) die "unknown option: $1" ;;
   esac
 done
-case "$CHANNEL" in stable | beta | alpha) ;; *) die "--channel must be stable, beta or alpha" ;; esac
+case "$CHANNEL" in "" | stable | beta | alpha) ;; *) die "--channel must be stable, beta or alpha" ;; esac
 [ "$(id -u)" -ne 0 ] || die "run this as the user who will use Findex, not as root."
 
 refresh_menus() {
@@ -88,8 +89,9 @@ else
   # Every AppImage URL as "<sort key> <version> <url>"; the newest is last after a sort. The key
   # orders by number, then alpha < beta < stable, then the pre-release number (plain `sort -V`
   # puts 0.0.1 before 0.0.1-alpha.1). A channel takes its own builds and every steadier one.
-  newest="$(printf '%s\n' "$releases" | grep -oE 'https://[^"]*/Findex-[0-9][^"/]*-x86_64\.AppImage' | sort -u |
-    awk -v channel="$CHANNEL" -v want="$VERSION" '{
+  appimages="$(printf '%s\n' "$releases" | grep -oE 'https://[^"]*/Findex-[0-9][^"/]*-x86_64\.AppImage' | sort -u)"
+  find_newest() {
+    printf '%s\n' "$appimages" | awk -v channel="$1" -v want="$VERSION" '{
       v = $0; sub(/.*\/Findex-/, "", v); sub(/-x86_64\.AppImage$/, "", v)
       if (v !~ /^[0-9]+\.[0-9]+\.[0-9]+(-(alpha|beta)\.[0-9]+)?$/) next
       split(v, p, /[.-]/)
@@ -97,8 +99,19 @@ else
       if (p[4] == "alpha") { stage = 0; n = p[5] } else if (p[4] == "beta") { stage = 1; n = p[5] }
       if (want != "" ? v != want : (stage == 0 && channel != "alpha") || (stage == 1 && channel == "stable")) next
       printf "%08d.%08d.%08d.%d.%08d %s %s\n", p[1], p[2], p[3], stage, n, v, $0
-    }' | sort | tail -n 1)"
-  [ -n "$newest" ] || die "no Linux build found for ${VERSION:-the $CHANNEL channel}. Try --channel alpha, or see the releases page."
+    }' | sort | tail -n 1
+  }
+  if [ -n "$CHANNEL" ] || [ -n "$VERSION" ]; then
+    newest="$(find_newest "${CHANNEL:-alpha}")"
+  else
+    # No channel asked for: stable if there is one, else beta, else alpha.
+    newest=""
+    for c in stable beta alpha; do
+      newest="$(find_newest "$c")"
+      [ -z "$newest" ] || { CHANNEL="$c"; break; }
+    done
+  fi
+  [ -n "$newest" ] || die "no Linux build found for ${VERSION:-any channel}. See the releases page."
   label="$(printf '%s' "$newest" | cut -d' ' -f2)"
   echo "Downloading Findex $label..."
   fetch_to "$(printf '%s' "$newest" | cut -d' ' -f3)" "$APP.part" || die "the download failed. Nothing was changed."
