@@ -22,6 +22,7 @@ Tabs behave like Windows 11 and like a browser.
 |---|---|---|
 | Open, close | `+` button, Ctrl+T, Ctrl+W, middle-click on a tab closes it. Closing the last tab closes the window. | P0 |
 | Switch | Ctrl+Tab / Ctrl+Shift+Tab, Ctrl+1..8 jump to tab N, Ctrl+9 jumps to the last tab. | P0 |
+| Reopen, duplicate | Ctrl+Shift+T reopens the last closed tab (10 kept, with its sort). Ctrl+Shift+K duplicates the active tab. | P1 |
 | Open folder in new tab | Middle-click or Ctrl+click on a folder, context menu "Open in new tab", Ctrl+Enter. | P0 |
 | Per-tab state | Own path, back/forward history, view mode, sort, scroll offset, selection, search text. | P0 |
 | Reorder | Drag to reorder inside the strip. | P0 |

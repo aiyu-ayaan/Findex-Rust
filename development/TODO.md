@@ -84,7 +84,7 @@ Legend: `[ ]` open, `[x]` done. P0 = v1.0 blocker, P1 = v1.0 target, P2 = later.
 - [x] Folder Options window (General / View / Search / Findex)
 
 - [ ] Tear-off tabs and move between windows
-- [ ] Reopen closed tab, duplicate tab
+- [x] Reopen closed tab (Ctrl+Shift+T), duplicate tab (Ctrl+Shift+K)
 - [ ] Drop files onto a tab (hover to switch)
 - [x] Session restore (Folder Options > restore tabs)
 - [ ] Single-instance IPC (D-Bus on Linux, named pipe on Windows)

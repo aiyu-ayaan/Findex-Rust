@@ -114,6 +114,8 @@ pub struct App {
     stats: HashMap<u64, JobStats>,
     undo: Option<Undo>,
     type_ahead: (String, Instant),
+    /// Recently closed tabs (path, sort), newest last, for Ctrl+Shift+T.
+    closed_tabs: Vec<(Option<PathBuf>, Sort)>,
     tabs_model: Rc<VecModel<TabData>>,
     jobs_model: Rc<VecModel<JobData>>,
     default_fm: bool,
@@ -192,6 +194,7 @@ pub fn start(ui: AppWindow, start: Option<PathBuf>) {
         stats: HashMap::new(),
         undo: None,
         type_ahead: (String::new(), Instant::now()),
+        closed_tabs: Vec::new(),
         tabs_model,
         jobs_model,
         default_fm: false,
@@ -564,11 +567,28 @@ impl App {
             return;
         }
         self.tabs[i].cancel.cancel();
-        self.tabs.remove(i);
+        let closed = self.tabs.remove(i);
+        self.closed_tabs.push((closed.path, closed.sort));
+        if self.closed_tabs.len() > 10 {
+            self.closed_tabs.remove(0);
+        }
         if self.active >= self.tabs.len() || self.active > i {
             self.active = self.active.saturating_sub(1).min(self.tabs.len() - 1);
         }
         self.bind_tab();
+    }
+
+    fn reopen_closed_tab(&mut self) {
+        if let Some((path, sort)) = self.closed_tabs.pop() {
+            self.new_tab(path);
+            self.tab_mut().sort = sort;
+        }
+    }
+
+    fn duplicate_tab(&mut self, i: usize) {
+        let (path, sort) = (self.tabs[i].path.clone(), self.tabs[i].sort);
+        self.new_tab(path);
+        self.tab_mut().sort = sort;
     }
 
     fn switch_tab(&mut self, i: usize) {
@@ -1944,6 +1964,14 @@ impl App {
         // Global chords
         if ctrl && !alt {
             match lower.as_str() {
+                "t" if shift => {
+                    self.reopen_closed_tab();
+                    return true;
+                }
+                "k" if shift => {
+                    self.duplicate_tab(self.active);
+                    return true;
+                }
                 "t" => {
                     self.new_tab(dirs::home_dir());
                     return true;
