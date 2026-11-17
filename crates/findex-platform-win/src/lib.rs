@@ -351,4 +351,4 @@ pub fn forward_to_running(_request: &str) -> bool {
     false
 }
 
-pub fn listen_for_instances(_on_request: impl Fn(String) + Send + 'static) {}
+pub fn listen_for_instances(_on_request: impl Fn(String) + Send + Sync + 'static) {}

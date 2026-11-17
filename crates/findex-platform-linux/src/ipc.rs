@@ -21,8 +21,48 @@ pub fn forward(request: &str) -> bool {
     s.write_all(line.as_bytes()).is_ok()
 }
 
+/// `org.freedesktop.FileManager1`: lets other apps ("Show in folder", browsers) open Findex.
+struct FileManager1(std::sync::Arc<dyn Fn(String) + Send + Sync>);
+
+#[zbus::interface(name = "org.freedesktop.FileManager1")]
+impl FileManager1 {
+    fn show_folders(&self, uris: Vec<String>, _startup_id: String) {
+        uris.into_iter().for_each(|u| (self.0)(u));
+    }
+    fn show_items(&self, uris: Vec<String>, _startup_id: String) {
+        uris.into_iter().for_each(|u| (self.0)(u));
+    }
+    fn show_item_properties(&self, uris: Vec<String>, _startup_id: String) {
+        uris.into_iter().for_each(|u| (self.0)(u));
+    }
+}
+
+fn serve_dbus(on_request: std::sync::Arc<dyn Fn(String) + Send + Sync>) {
+    std::thread::Builder::new()
+        .name("findex-dbus".into())
+        .spawn(move || {
+            // No session bus (SSH, containers): skip quietly.
+            let conn = zbus::blocking::connection::Builder::session()
+                .and_then(|b| b.name("org.freedesktop.FileManager1"))
+                .and_then(|b| b.serve_at("/org/freedesktop/FileManager1", FileManager1(on_request)))
+                .and_then(|b| b.build());
+            if let Ok(_conn) = conn {
+                loop {
+                    std::thread::park();
+                }
+            }
+        })
+        .ok();
+}
+
 /// Starts accepting requests from later instances; `on_request` runs on a worker thread.
-pub fn listen(on_request: impl Fn(String) + Send + 'static) {
+pub fn listen(on_request: impl Fn(String) + Send + Sync + 'static) {
+    let on_request: std::sync::Arc<dyn Fn(String) + Send + Sync> = std::sync::Arc::new(on_request);
+    serve_dbus(on_request.clone());
+    listen_socket(on_request);
+}
+
+fn listen_socket(on_request: std::sync::Arc<dyn Fn(String) + Send + Sync>) {
     let path = socket_path();
     let listener = match UnixListener::bind(&path) {
         Ok(l) => l,

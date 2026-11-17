@@ -582,7 +582,16 @@ impl App {
     /// A request from another Findex launch: open the folder in a new tab and bring the window forward.
     pub fn open_external(&mut self, req: &str) {
         if !req.is_empty() {
-            self.new_tab(Some(PathBuf::from(req)));
+            // Paths from the socket, `file://` URIs from FileManager1.
+            let p = crate::parse_location(req);
+            match p.parent().filter(|_| p.is_file()) {
+                // "Show in folder": open the parent and select the file.
+                Some(parent) => {
+                    self.new_tab(Some(parent.to_path_buf()));
+                    self.tab_mut().pending_select = p.file_name().map(|n| vec![n.to_os_string()]).unwrap_or_default();
+                }
+                None => self.new_tab(Some(p)),
+            }
         }
         let w = self.ui.window();
         w.set_minimized(false);

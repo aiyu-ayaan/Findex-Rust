@@ -34,7 +34,7 @@ Equivalent of `xdg-mime default findex.desktop inode/directory`. Findex writes t
 Browsers and many apps call `ShowItems`, `ShowFolders` and `ShowItemProperties` on this bus name instead of reading the MIME default. Whoever owns the name wins. **[V]**
 
 - Findex implements the interface (crate `zbus`) in its main process.
-- Install `~/.local/share/dbus-1/services/org.freedesktop.FileManager1.service` with `Exec=findex --dbus-activate`, so the name is activatable when Findex is not running. User-level service files override system-level ones.
+- Install `~/.local/share/dbus-1/services/org.freedesktop.FileManager1.service` with `Exec=findex` (no arguments; the bus holds the call until the name is owned), so the name is activatable when Findex is not running. User-level service files override system-level ones.
 - The `Exec=` must match the MIME default. A mismatch is the known cause of "wrong file manager opens" bugs. **[V]**
 - The settings page shows which service currently owns the name (`busctl --user introspect`) and warns when it is not Findex.
 
@@ -53,7 +53,7 @@ Rules:
 
 - Findex checks whether `<Super>e` is already bound, and shows the existing binding before replacing it. It stores the previous value so "undo" restores it.
 - The current development machine runs GNOME on X11, so the GNOME path is the first to implement and test.
-- Single instance (implemented): the first Findex listens on `$XDG_RUNTIME_DIR/findex.sock` (fallback `/tmp/findex-<uid>.sock`). A later `findex PATH` writes the path as one line to it and exits in a few ms; the running window opens a new tab and comes forward. A stale socket from a crashed instance is detected by a failed connect and replaced. Set `FINDEX_NO_IPC=1` to opt out (UI tests do). A D-Bus `FileManager1` service is the separate next step.
+- Single instance (implemented): the first Findex listens on `$XDG_RUNTIME_DIR/findex.sock` (fallback `/tmp/findex-<uid>.sock`). A later `findex PATH` writes the path as one line to it and exits in a few ms; the running window opens a new tab and comes forward. A stale socket from a crashed instance is detected by a failed connect and replaced. Set `FINDEX_NO_IPC=1` to opt out (UI tests do). The same callback serves D-Bus `FileManager1` (`ShowFolders`, `ShowItems`, `ShowItemProperties`, session bus, via zbus). `--set-default` writes the activation file and `--repair` removes it. Verified with `busctl --user call`; behaviour against Nautilus's own service is [?].
 
 ### 2.5 Out of scope on Linux for v1.0
 

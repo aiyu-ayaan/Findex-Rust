@@ -16,6 +16,11 @@ fn backup_file() -> PathBuf {
         .join("findex/previous-file-manager")
 }
 
+/// D-Bus activation file so "Show in folder" from other apps starts Findex when it is not running.
+fn dbus_service_file() -> Option<PathBuf> {
+    dirs::data_dir().map(|d| d.join("dbus-1/services/org.freedesktop.FileManager1.service"))
+}
+
 fn query_default() -> Option<String> {
     let out = Command::new("xdg-mime")
         .args(["query", "default", "inode/directory"])
@@ -68,12 +73,25 @@ pub fn set_default_file_manager(enable: bool) -> io::Result<String> {
             std::fs::write(&backup, prev)?;
         }
         set_mime_default(DESKTOP_ID)?;
+        if let Some(f) = dbus_service_file() {
+            std::fs::create_dir_all(f.parent().unwrap())?;
+            std::fs::write(
+                &f,
+                format!(
+                    "[D-BUS Service]\nName=org.freedesktop.FileManager1\nExec=\"{}\"\n",
+                    exe.display()
+                ),
+            )?;
+        }
         Ok("Findex is now the default file manager. Super+E opens it on GNOME.".into())
     } else {
         let prev = std::fs::read_to_string(&backup)
             .unwrap_or_else(|_| "org.gnome.Nautilus.desktop".into());
         set_mime_default(prev.trim())?;
         let _ = std::fs::remove_file(&backup);
+        if let Some(f) = dbus_service_file() {
+            let _ = std::fs::remove_file(f);
+        }
         Ok(format!(
             "Restored {} as the default file manager.",
             prev.trim()

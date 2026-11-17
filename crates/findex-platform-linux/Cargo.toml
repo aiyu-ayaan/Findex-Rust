@@ -10,6 +10,7 @@ findex-core.workspace = true
 rustix.workspace = true
 dirs.workspace = true
 raw-window-handle.workspace = true
+zbus.workspace = true
 
 [dev-dependencies]
 tempfile.workspace = true

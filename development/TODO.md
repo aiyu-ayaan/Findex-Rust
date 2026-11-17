@@ -96,7 +96,7 @@ Legend: `[ ]` open, `[x]` done. P0 = v1.0 blocker, P1 = v1.0 target, P2 = later.
 - [ ] S3 Win+E hook spike
 - [ ] S5 Linux Super+E binding spike (GNOME first, matches dev machine; then KDE, XFCE)
 - [ ] S6 `FileManager1` ownership spike
-- [ ] Linux: `.desktop` file, `mimeapps.list` default, D-Bus service (desktop + default done; FileManager1 D-Bus open)
+- [ ] Linux: `.desktop` file, `mimeapps.list` default, D-Bus service (desktop, default and `FileManager1` done; ShowItems opens the parent and selects, ShowFolders opens a tab; activation file written by --set-default, ownership vs Nautilus unverified, S6)
 - [ ] Linux: Super+E (and Explorer media key) binding with undo
 - [ ] Windows: launcher stub with Explorer fallback
 - [ ] Windows: registry override with backup and restore
