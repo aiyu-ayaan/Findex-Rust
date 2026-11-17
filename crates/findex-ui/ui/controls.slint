@@ -249,12 +249,9 @@ export component DialogButton inherits Rectangle {
     accessible-role: button;
     accessible-label: text;
     accessible-action-default => { clicked(); }
-    // Laid out by preferred width so the button grows with its label; the label itself is pixel-snapped.
-    HorizontalLayout {
-        padding-left: 12px;
-        padding-right: 12px;
-        Rectangle { min-width: label.text-width; }
-    }
+    // Sized by its label plus 12 px each side; it never stretches to fill a row.
+    preferred-width: label.text-width + 24px;
+    horizontal-stretch: 0;
     label := SnappedText {
         width: 100%;
         height: 100%;
