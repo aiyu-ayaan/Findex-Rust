@@ -87,7 +87,7 @@ Legend: `[ ]` open, `[x]` done. P0 = v1.0 blocker, P1 = v1.0 target, P2 = later.
 - [x] Reopen closed tab (Ctrl+Shift+T), duplicate tab (Ctrl+Shift+K)
 - [ ] Drop files onto a tab (hover to switch)
 - [x] Session restore (Folder Options > restore tabs)
-- [ ] Single-instance IPC (D-Bus on Linux, named pipe on Windows)
+- [ ] Single-instance IPC (Linux done over a Unix socket in `$XDG_RUNTIME_DIR/findex.sock`: a second launch opens a tab in the running window; Windows named pipe open)
 - [x] Search in folder (recursive optional) — parallel fuzzy search
 
 ## M6 Default file manager (P0)

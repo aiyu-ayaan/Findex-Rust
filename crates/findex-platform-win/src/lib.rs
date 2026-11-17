@@ -345,3 +345,10 @@ pub fn set_default_file_manager(_enable: bool) -> io::Result<String> {
         "Default file manager on Windows needs spikes S2/S3 first (see docs/04-platform-integration.md)",
     ))
 }
+
+/// Single-instance handoff. Named-pipe version still open; until then every launch starts its own process.
+pub fn forward_to_running(_request: &str) -> bool {
+    false
+}
+
+pub fn listen_for_instances(_on_request: impl Fn(String) + Send + 'static) {}

@@ -53,7 +53,7 @@ Rules:
 
 - Findex checks whether `<Super>e` is already bound, and shows the existing binding before replacing it. It stores the previous value so "undo" restores it.
 - The current development machine runs GNOME on X11, so the GNOME path is the first to implement and test.
-- `findex --new-window` talks to the running instance (single-instance IPC over D-Bus) and falls back to starting a process.
+- Single instance (implemented): the first Findex listens on `$XDG_RUNTIME_DIR/findex.sock` (fallback `/tmp/findex-<uid>.sock`). A later `findex PATH` writes the path as one line to it and exits in a few ms; the running window opens a new tab and comes forward. A stale socket from a crashed instance is detected by a failed connect and replaced. Set `FINDEX_NO_IPC=1` to opt out (UI tests do). A D-Bus `FileManager1` service is the separate next step.
 
 ### 2.5 Out of scope on Linux for v1.0
 

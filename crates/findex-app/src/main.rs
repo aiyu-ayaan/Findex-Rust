@@ -94,9 +94,26 @@ fn main() {
         .map(|a| parse_location(a))
         .map(|p| std::path::absolute(&p).unwrap_or(p));
 
+    // Single instance: hand the request to a running Findex. Test runs keep their own process.
+    let isolated = std::env::var_os("FINDEX_UI_TEST").is_some()
+        || std::env::var_os("FINDEX_SNAPSHOT").is_some()
+        || std::env::var_os("FINDEX_NO_IPC").is_some();
+    if !isolated
+        && findex_platform::forward_to_running(
+            &start.as_ref().map(|p| p.display().to_string()).unwrap_or_default(),
+        )
+    {
+        return;
+    }
+
     let ui = findex_ui::AppWindow::new().expect("create window");
     app::start(ui.clone_strong(), start);
     ui.show().expect("show window");
+    if !isolated {
+        findex_platform::listen_for_instances(|req| {
+            slint::invoke_from_event_loop(move || app::with_app(|a| a.open_external(&req))).ok();
+        });
+    }
     // The native window exists now: request the OS backdrop (Mica on Windows 11).
     slint::Timer::single_shot(Duration::from_millis(0), || {
         app::with_app(|a| a.apply_window_effects())

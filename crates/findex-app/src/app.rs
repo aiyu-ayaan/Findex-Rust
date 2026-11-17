@@ -579,6 +579,16 @@ impl App {
         self.bind_tab();
     }
 
+    /// A request from another Findex launch: open the folder in a new tab and bring the window forward.
+    pub fn open_external(&mut self, req: &str) {
+        if !req.is_empty() {
+            self.new_tab(Some(PathBuf::from(req)));
+        }
+        let w = self.ui.window();
+        w.set_minimized(false);
+        let _ = w.show();
+    }
+
     fn reopen_closed_tab(&mut self) {
         if let Some((path, sort)) = self.closed_tabs.pop() {
             self.new_tab(path);
