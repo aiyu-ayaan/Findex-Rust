@@ -99,7 +99,10 @@ fn main() {
     let isolated = std::env::var_os("FINDEX_UI_TEST").is_some()
         || std::env::var_os("FINDEX_SNAPSHOT").is_some()
         || std::env::var_os("FINDEX_NO_IPC").is_some();
+    // After a self-update the old process is still exiting; never hand the window to it.
+    let relaunched = args.iter().any(|a| a == "--relaunched");
     if !isolated
+        && !relaunched
         && findex_platform::forward_to_running(
             &start.as_ref().map(|p| p.display().to_string()).unwrap_or_default(),
         )
@@ -151,6 +154,7 @@ fn main() {
     }
     slint::run_event_loop_until_quit().expect("event loop");
     app::with_app(|a| a.save_session());
+    app::with_app(|a| a.finish_relaunch());
 }
 
 #[cfg(test)]

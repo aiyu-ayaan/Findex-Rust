@@ -3,7 +3,7 @@
 import { ScrollView, CheckBox } from "std-widgets.slint";
 import { Theme } from "theme.slint";
 import { Icons } from "icons.slint";
-import { DialogButton, HDivider, SnappedText } from "controls.slint";
+import { DialogButton, HDivider, SnappedText, ThinProgress } from "controls.slint";
 
 export struct Options {
     // General
@@ -33,6 +33,9 @@ export struct Options {
     theme: int,
     transparency: bool,
     compact: bool,
+    // Updates
+    update-check: bool,
+    update-channel: int,
 }
 
 component SectionTitle inherits Text {
@@ -130,7 +133,7 @@ export component OptionsWindow inherits Window {
     background: transparent;
     default-font-family: "Inter";
     default-font-size: Theme.font-body;
-    width: 520px;
+    width: 600px;
     height: 640px;
 
     in-out property <Options> opts;
@@ -144,6 +147,19 @@ export component OptionsWindow inherits Window {
     callback restore-defaults();
     callback toggle-default-fm();
     callback close-requested();
+    // Updates page
+    in property <string> app-version;
+    in property <string> update-status;
+    /// Version on offer, empty when there is none.
+    in property <string> update-found;
+    in property <string> update-notes;
+    in property <bool> update-checking;
+    /// Installing restarts Findex (an AppImage); otherwise an installer is downloaded.
+    in property <bool> self-install;
+    /// Download progress 0..1, below 0 when idle.
+    in property <float> update-progress: -1;
+    callback check-updates(int);
+    callback install-update();
 
     esc := FocusScope {
         init => { self.focus(); }
@@ -189,6 +205,7 @@ export component OptionsWindow inherits Window {
                 PageTab { text: "Search"; selected: page == 2; clicked => { page = 2; } }
                 PageTab { text: "Findex"; selected: page == 3; clicked => { page = 3; } }
                 PageTab { text: "Hidden drives"; selected: page == 4; clicked => { page = 4; } }
+                PageTab { text: "Updates"; selected: page == 5; clicked => { page = 5; } }
             }
             Rectangle {
                 vertical-stretch: 1;
@@ -288,6 +305,51 @@ export component OptionsWindow inherits Window {
                                 spacing: 12px;
                                 Text { text: n; color: Theme.text-primary; vertical-alignment: center; overflow: elide; horizontal-stretch: 1; }
                                 DialogButton { text: "Show"; min-width: 72px; clicked => { root.unhide-drive(i); } }
+                            }
+                        }
+
+                        if page == 5: VerticalLayout {
+                            spacing: 6px;
+                            SectionTitle { text: "Findex " + app-version; }
+                            Text {
+                                text: update-status;
+                                color: Theme.text-secondary;
+                                wrap: word-wrap;
+                                accessible-role: AccessibleRole.text;
+                            }
+                            if update-progress >= 0: HorizontalLayout {
+                                spacing: 12px;
+                                ThinProgress { value: update-progress; y: (parent.height - self.height) / 2; horizontal-stretch: 1; }
+                                Text { text: Math.round(update-progress * 100) + "%"; color: Theme.text-secondary; font-size: Theme.font-caption; width: 36px; horizontal-alignment: right; }
+                            }
+                            HorizontalLayout {
+                                alignment: start;
+                                padding-top: 4px;
+                                if update-found == "": DialogButton {
+                                    text: update-checking ? "Checking..." : "Check for updates";
+                                    min-width: 160px;
+                                    clicked => { if !update-checking { root.check-updates(opts.update-channel); } }
+                                }
+                                if update-found != "": DialogButton {
+                                    text: self-install ? "Download and restart" : "Download update";
+                                    primary: true;
+                                    min-width: 180px;
+                                    clicked => { if update-progress < 0 { root.install-update(); } }
+                                }
+                            }
+                            Rectangle { height: 10px; }
+                            SectionTitle { text: "Update channel"; }
+                            Radio { text: "Stable: tested releases only"; checked: opts.update-channel == 2; clicked => { opts.update-channel = 2; } }
+                            Radio { text: "Beta: nearly finished features, plus stable releases"; checked: opts.update-channel == 1; clicked => { opts.update-channel = 1; } }
+                            Radio { text: "Alpha: the newest builds, which can be unfinished"; checked: opts.update-channel == 0; clicked => { opts.update-channel = 0; } }
+                            Rectangle { height: 10px; }
+                            SectionTitle { text: "When Findex starts"; }
+                            Check { text: "Check for updates and offer new versions in a dialog"; checked: opts.update-check; toggled => { opts.update-check = self.checked; } }
+                            if update-notes != "": VerticalLayout {
+                                spacing: 6px;
+                                padding-top: 10px;
+                                SectionTitle { text: "What's new in " + update-found; }
+                                Text { text: update-notes; color: Theme.text-primary; wrap: word-wrap; accessible-role: AccessibleRole.text; }
                             }
                         }
                     }

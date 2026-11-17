@@ -1,12 +1,15 @@
 // Transfer panel, dialogs and toast.
 import { Theme } from "theme.slint";
-import { DialogButton, SnappedText, TextField } from "controls.slint";
+import { DialogButton, SnappedText, TextField, ThinProgress } from "controls.slint";
 
 /// Modal dialog: smoke layer, 480 px max, 24 px padding, one primary action. Escape cancels.
 export component Dialog inherits Rectangle {
     in property <string> title;
     in property <string> message;
     in property <string> primary-text: "OK";
+    in property <string> cancel-text: "Cancel";
+    /// Progress bar under the message, 0..1; hidden below 0.
+    in property <float> progress: -1;
     in property <bool> danger;
     in property <bool> has-input;
     in property <string> input-label;
@@ -43,6 +46,7 @@ export component Dialog inherits Rectangle {
                     spacing: 12px;
                     Text { text: title; color: Theme.text-primary; font-size: Theme.font-subtitle; font-weight: 600; wrap: word-wrap; }
                     if message != "": Text { text: message; color: Theme.text-primary; wrap: word-wrap; }
+                    if progress >= 0: ThinProgress { value: progress; accessible-role: progress-indicator; accessible-value: Math.round(progress * 100) + "%"; }
                     if has-input: Text { text: input-label; color: Theme.text-secondary; font-size: Theme.font-caption; }
                     field := TextField {
                         visible: has-input;
@@ -62,7 +66,7 @@ export component Dialog inherits Rectangle {
                         spacing: 8px;
                         alignment: end;
                         DialogButton { text: primary-text; primary: true; danger: root.danger; clicked => { root.primary(); } }
-                        cancel-btn := DialogButton { text: "Cancel"; clicked => { root.dismiss(); } }
+                        cancel-btn := DialogButton { text: root.cancel-text; clicked => { root.dismiss(); } }
                     }
                 }
             }

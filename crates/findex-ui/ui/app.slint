@@ -147,6 +147,14 @@ export component AppWindow inherits Window {
         dialog-kind = 2;
         dialog.open-focus();
     }
+    /// Offers a new release (dialog kind 4); Rust closes it when the install ends.
+    public function show-update() {
+        dialog-kind = 4;
+        dialog.open-focus();
+    }
+    public function close-update() {
+        if dialog-kind == 4 { dialog-kind = 0; list-scope.focus(); }
+    }
     public function focus-list() { list-scope.focus(); }
     /// Puts text on the system clipboard (Slint exposes the clipboard through text inputs).
     public function copy-text(t: string) {
@@ -164,7 +172,13 @@ export component AppWindow inherits Window {
         context-menu.show();
     }
 
-    property <int> dialog-kind; // 0 none, 1 rename, 2 delete permanently, 3 rename drive
+    property <int> dialog-kind; // 0 none, 1 rename, 2 delete permanently, 3 rename drive, 4 update
+    in property <string> update-version;
+    in property <string> update-installed;
+    in property <bool> update-self-install;
+    in property <float> update-progress: -1;
+    callback update-install();
+    callback update-later();
     property <bool> drive-net;
     property <int> drive-idx;
     property <string> dialog-input;
@@ -503,9 +517,11 @@ export component AppWindow inherits Window {
     // ---- modal dialogs ----
     dialog := Dialog {
         visible: root.dialog-kind != 0;
-        title: root.dialog-kind == 1 ? "Rename" : root.dialog-kind == 3 ? "Rename drive" : "Delete permanently?";
-        message: root.dialog-kind == 3 ? "Leave the name empty to restore the original one." : root.dialog-kind == 2 ? (root.delete-count == 1 ? "This item will be deleted and cannot be restored from the Trash." : root.delete-count + " items will be deleted and cannot be restored from the Trash.") : "";
-        primary-text: root.dialog-kind == 1 || root.dialog-kind == 3 ? "Rename" : "Delete";
+        title: root.dialog-kind == 1 ? "Rename" : root.dialog-kind == 3 ? "Rename drive" : root.dialog-kind == 4 ? "Findex " + root.update-version + " is available" : "Delete permanently?";
+        message: root.dialog-kind == 4 ? "You have " + root.update-installed + ". " + (root.update-self-install ? "Findex restarts when the download is done." : "The installer is saved to Downloads and opened.") : root.dialog-kind == 3 ? "Leave the name empty to restore the original one." : root.dialog-kind == 2 ? (root.delete-count == 1 ? "This item will be deleted and cannot be restored from the Trash." : root.delete-count + " items will be deleted and cannot be restored from the Trash.") : "";
+        primary-text: root.dialog-kind == 1 || root.dialog-kind == 3 ? "Rename" : root.dialog-kind == 4 ? (root.update-self-install ? "Download and restart" : "Download") : "Delete";
+        cancel-text: root.dialog-kind == 4 ? "Later" : "Cancel";
+        progress: root.dialog-kind == 4 ? root.update-progress : -1;
         danger: root.dialog-kind == 2;
         has-input: root.dialog-kind == 1 || root.dialog-kind == 3;
         input-label: root.dialog-kind == 3 ? "Drive name" : "New name";
@@ -514,10 +530,15 @@ export component AppWindow inherits Window {
             if root.dialog-kind == 1 { root.rename-commit(root.dialog-input); }
             if root.dialog-kind == 3 { root.drive-rename-commit(root.dialog-input); }
             if root.dialog-kind == 2 { root.delete-confirmed(); }
+            if root.dialog-kind == 4 { root.update-install(); return; }
             root.dialog-kind = 0;
             list-scope.focus();
         }
-        dismiss => { root.dialog-kind = 0; list-scope.focus(); }
+        dismiss => {
+            if root.dialog-kind == 4 { root.update-later(); }
+            root.dialog-kind = 0;
+            list-scope.focus();
+        }
     }
 
     clip := TextInput { visible: false; width: 0; height: 0; }

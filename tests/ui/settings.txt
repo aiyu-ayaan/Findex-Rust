@@ -1,6 +1,6 @@
 # Folder Options window: pages render; each option changes behaviour; Cancel discards; OK commits; defaults restore.
-# Options window layout (520x640): tabs y=65 (General 51, View 121, Search 189, Findex 263, Hidden drives 355);
-# footer y=608 (Restore 86, OK 288, Cancel 375, Apply 464); option rows at x=34.
+# Options window layout (600x640): tabs y=65 (General 51, View 121, Search 189, Findex 263, Hidden drives 355, Updates 454);
+# footer y=608 (Restore 86, OK 368, Cancel 455, Apply 544); option rows at x=34.
 resize 1280 800
 expect rows 17
 click 571 113
@@ -17,7 +17,7 @@ oclick 34 231
 oclick 34 171
 oclick 34 351
 oclick 34 442
-oclick 464 608
+oclick 544 608
 expect rows 18
 expect checkboxes true
 expect title .cache/findex-ui-fixture
@@ -36,7 +36,7 @@ wait 300
 snap 74-options-applied
 # --- Cancel discards: turn the status bar off, then cancel
 oclick 34 321
-oclick 375 608
+oclick 455 608
 expect options-window false
 expect statusbar true
 # --- OK commits: single-click opening + typing goes to the search box
@@ -48,7 +48,7 @@ oclick 34 358
 oclick 121 65
 wait 200
 oclick 34 504
-oclick 288 608
+oclick 368 608
 expect options-window false
 click 400 187
 expect title Alpha
@@ -70,7 +70,7 @@ wait 200
 osnap 73-options-findex
 oclick 34 179
 oclick 34 282
-oclick 464 608
+oclick 544 608
 expect dark false
 expect transparency false
 wait 300
@@ -78,16 +78,20 @@ snap 75-light-opaque
 osnap 76-options-light
 oclick 34 213
 oclick 34 282
-oclick 464 608
+oclick 544 608
 expect dark true
 expect transparency true
 # --- Hidden drives page: renders empty state
 oclick 355 65
 wait 200
 osnap 77-options-hidden-drives
+# --- Updates page: renders (a development build never reaches the network)
+oclick 454 65
+wait 200
+osnap 78-options-updates
 # --- Restore Defaults puts everything back (theme stays as chosen)
 oclick 86 608
-oclick 288 608
+oclick 368 608
 expect rows 17
 expect checkboxes false
 key Home

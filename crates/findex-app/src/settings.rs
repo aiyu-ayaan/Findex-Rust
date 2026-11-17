@@ -34,6 +34,13 @@ pub struct Settings {
     // Folder Options: Search
     pub search_subfolders: bool,
     pub search_hidden: bool,
+    // Folder Options: Updates
+    /// Offer a new release in a dialog at startup.
+    pub update_check: bool,
+    /// 0 alpha, 1 beta, 2 stable; defaults to the stage of the running build.
+    pub update_channel: i32,
+    /// Version the user answered "Later" to; it is not offered again at startup.
+    pub update_skipped: String,
     /// Open tabs at exit, for "Restore previous folder tabs at startup".
     pub tabs: Vec<PathBuf>,
     /// Custom drive names and hidden drives as (key, name); the key is the device or mount path.
@@ -68,6 +75,9 @@ impl Default for Settings {
             nav_trash: true,
             search_subfolders: true,
             search_hidden: false,
+            update_check: true,
+            update_channel: crate::update::channel_of(crate::update::VERSION),
+            update_skipped: String::new(),
             tabs: Vec::new(),
             drive_names: Vec::new(),
             hidden_drives: Vec::new(),
@@ -104,7 +114,8 @@ macro_rules! bool_keys {
             nav_network,
             nav_trash,
             search_subfolders,
-            search_hidden
+            search_hidden,
+            update_check
         )
     };
 }
@@ -124,6 +135,8 @@ impl Settings {
                         $(stringify!($f) => s.$f = b,)*
                         "theme" => s.theme = v.parse().unwrap_or(0).clamp(0, 2),
                         "view" => s.view = v.parse().unwrap_or(5).clamp(0, 7),
+                        "update_channel" => s.update_channel = v.parse().unwrap_or(2).clamp(0, 2),
+                        "update_skipped" => s.update_skipped = v.to_string(),
                         "tab" => s.tabs.push(PathBuf::from(v)),
                         "drive_name" | "hidden_drive" => {
                             if let Some((key, name)) = v.split_once('\t') {
@@ -141,7 +154,10 @@ impl Settings {
     }
 
     pub fn to_text(&self) -> String {
-        let mut t = format!("theme={}\nview={}\n", self.theme, self.view);
+        let mut t = format!(
+            "theme={}\nview={}\nupdate_channel={}\nupdate_skipped={}\n",
+            self.theme, self.view, self.update_channel, self.update_skipped
+        );
         macro_rules! put_bool {
             ($($f:ident),*) => { $( t.push_str(&format!("{}={}\n", stringify!($f), self.$f as u8)); )* };
         }
@@ -201,6 +217,8 @@ impl Settings {
             theme: self.theme,
             transparency: self.transparency,
             compact: self.compact,
+            update_check: self.update_check,
+            update_channel: self.update_channel,
         }
     }
 
@@ -227,6 +245,8 @@ impl Settings {
         self.theme = o.theme.clamp(0, 2);
         self.transparency = o.transparency;
         self.compact = o.compact;
+        self.update_check = o.update_check;
+        self.update_channel = o.update_channel.clamp(0, 2);
     }
 }
 
@@ -248,6 +268,9 @@ mod tests {
             view: 1,
             single_click: true,
             nav_trash: false,
+            update_check: false,
+            update_channel: 0,
+            update_skipped: "0.0.2-beta.1".into(),
             tabs: vec![PathBuf::from("/tmp/a b"), PathBuf::from("/home")],
             drive_names: vec![("/dev/sda1".into(), "Games".into())],
             hidden_drives: vec![("/mnt/x=y".into(), "Backup".into())],
@@ -257,5 +280,6 @@ mod tests {
         let mut o = Settings::default();
         o.set_options(&s.to_options());
         assert!(o.single_click && !o.nav_trash && o.theme == 2);
+        assert!(!o.update_check && o.update_channel == 0);
     }
 }

@@ -16,6 +16,7 @@ use slint::{ComponentHandle, Image, Model, ModelRc, SharedString, Timer, TimerMo
 
 use crate::model::ListingModel;
 use crate::settings::Settings;
+use crate::update::{self, Installed, Offer};
 
 thread_local! {
     static APP: RefCell<Option<App>> = const { RefCell::new(None) };
@@ -130,6 +131,12 @@ pub struct App {
     default_fm: bool,
     /// Key of the drive being renamed in the dialog.
     drive_target: Option<String>,
+    /// The last update check's answer; installing takes it from here.
+    update_offer: Option<Offer>,
+    update_checking: bool,
+    update_busy: bool,
+    /// The updated AppImage to start once this process has saved its session.
+    relaunch: Option<PathBuf>,
 }
 
 /// Stable identity of a drive: block device, else mount path.
@@ -169,6 +176,18 @@ pub fn start(ui: AppWindow, start: Option<PathBuf>) {
     options.on_unhide_drive(|i| with_app(|app| app.unhide_drive(i as usize)));
     options.on_toggle_default_fm(|| with_app(|app| app.toggle_default_fm()));
     options.on_close_requested(|| with_app(|app| drop(app.options.hide())));
+    options.on_check_updates(|channel| with_app(|app| app.check_updates(channel, false)));
+    options.on_install_update(|| with_app(|app| app.install_update()));
+    options.set_app_version(update::VERSION.into());
+    options.set_self_install(update::self_install());
+    options.set_update_status(
+        if update::is_dev() {
+            "This is a development build. It updates by rebuilding from source."
+        } else {
+            "Check whether a newer version is out."
+        }
+        .into(),
+    );
     let props = PropertiesWindow::new().expect("create properties window");
     props.on_close_requested(|| with_app(|app| app.hide_props()));
     props.on_apply(|n, ro, h| with_app(|app| app.props_apply(n.to_string(), ro, h)));
@@ -216,6 +235,10 @@ pub fn start(ui: AppWindow, start: Option<PathBuf>) {
         tabs_model,
         jobs_model,
         default_fm: false,
+        update_offer: None,
+        update_checking: false,
+        update_busy: false,
+        relaunch: None,
     };
     app.apply_settings();
     let restored: Vec<PathBuf> = if start.is_none() && app.settings.restore_tabs {
@@ -254,6 +277,15 @@ pub fn start(ui: AppWindow, start: Option<PathBuf>) {
     std::thread::spawn(|| {
         let is_default = findex_platform::is_default_file_manager();
         post(move |app| app.set_default_fm_state(is_default));
+    });
+    with_app(|app| {
+        if app.settings.update_check && update::auto_check_allowed() {
+            let channel = app.settings.update_channel;
+            // Later than the first frame, so startup never waits on the network.
+            Timer::single_shot(Duration::from_secs(3), move || {
+                with_app(|app| app.check_updates(channel, true))
+            });
+        }
     });
 }
 
@@ -400,6 +432,8 @@ fn wire(ui: &AppWindow) {
     on!(on_window_changed, |_app| {});
     on!(on_show_transfers, |app| app.show_transfers(false));
     on!(on_show_options, |app| app.show_options());
+    on!(on_update_install, |app| app.install_update());
+    on!(on_update_later, |app| app.update_later());
     on!(on_show_properties, |app| app.show_properties());
     ui.on_key(move |text, ctrl, shift, alt, typing| {
         let mut handled = false;
@@ -2187,6 +2221,126 @@ impl App {
                 }
             });
         });
+    }
+
+    // ---------------- updates ----------------
+
+    fn check_updates(&mut self, channel: i32, at_start: bool) {
+        if self.update_checking || self.update_busy {
+            return;
+        }
+        self.update_checking = true;
+        self.options.set_update_checking(true);
+        std::thread::spawn(move || {
+            let r = update::check(channel);
+            post(move |app| app.update_checked(r, at_start));
+        });
+    }
+
+    fn update_checked(&mut self, r: Result<Option<Offer>, String>, at_start: bool) {
+        self.update_checking = false;
+        self.options.set_update_checking(false);
+        let status = match &r {
+            _ if update::is_dev() => "This is a development build. It updates by rebuilding from source.".into(),
+            Ok(Some(o)) => format!("Findex {} is available.", o.version),
+            Ok(None) => "Findex is up to date.".into(),
+            Err(e) => format!("Could not check for updates: {e}."),
+        };
+        self.options.set_update_status(status.into());
+        let offer = r.ok().flatten();
+        let (version, notes) = offer
+            .as_ref()
+            .map_or((String::new(), String::new()), |o| (o.version.clone(), o.notes.clone()));
+        self.options.set_update_found(version.into());
+        self.options.set_update_notes(notes.into());
+        if at_start
+            && let Some(o) = &offer
+            && o.version != self.settings.update_skipped
+        {
+            self.ui.set_update_version(o.version.clone().into());
+            self.ui.set_update_installed(update::VERSION.into());
+            self.ui.set_update_self_install(update::self_install());
+            self.ui.invoke_show_update();
+        }
+        self.update_offer = offer;
+    }
+
+    fn install_update(&mut self) {
+        if self.update_busy {
+            return;
+        }
+        let Some(offer) = self.update_offer.clone() else {
+            return;
+        };
+        self.update_busy = true;
+        self.set_update_progress(0.0);
+        std::thread::spawn(move || {
+            let shown = std::cell::Cell::new(0);
+            let r = update::install(&offer, &|f| {
+                let percent = (f * 100.0) as i32;
+                if percent != shown.get() {
+                    shown.set(percent);
+                    post(move |app| app.set_update_progress(f));
+                }
+            });
+            post(move |app| app.update_installed(r));
+        });
+    }
+
+    fn set_update_progress(&self, fraction: f32) {
+        self.ui.set_update_progress(fraction);
+        self.options.set_update_progress(fraction);
+    }
+
+    fn update_installed(&mut self, r: Result<Installed, String>) {
+        self.update_busy = false;
+        self.set_update_progress(-1.0);
+        self.ui.invoke_close_update();
+        match r {
+            Ok(Installed::Relaunch(path)) => {
+                self.relaunch = Some(path);
+                let _ = slint::quit_event_loop();
+            }
+            Ok(Installed::Saved(path)) => {
+                // Nothing opens the installer: show where it is.
+                if findex_platform::open_default(&path).is_err() {
+                    self.open_external(&path.display().to_string());
+                }
+                self.toast(format!("Update saved to {}", path.display()), false);
+            }
+            Err(e) => {
+                let msg = format!("The update failed: {e}.");
+                self.options.set_update_status(msg.clone().into());
+                self.toast(msg, false);
+            }
+        }
+    }
+
+    /// "Later" on the startup offer is remembered for that version.
+    fn update_later(&mut self) {
+        if self.update_busy {
+            return;
+        }
+        if let Some(o) = &self.update_offer {
+            self.settings.update_skipped = o.version.clone();
+            self.settings.save();
+        }
+    }
+
+    /// Starts the updated AppImage. Called at exit, after the session is saved.
+    pub fn finish_relaunch(&mut self) {
+        let Some(path) = self.relaunch.take() else {
+            return;
+        };
+        let mut cmd = std::process::Command::new(path);
+        // The new process must not hand its window to this one, which is exiting.
+        cmd.arg("--relaunched");
+        if let Some(p) = &self.tab().path {
+            cmd.arg(p);
+        }
+        if let Err(e) = cmd.spawn() {
+            eprintln!("findex: could not restart after the update: {e}");
+        }
     }
 
     // ---------------- thumbnails ----------------
