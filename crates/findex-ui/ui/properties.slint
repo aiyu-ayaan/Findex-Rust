@@ -181,7 +181,11 @@ export component PropertiesWindow inherits Window {
                         }
                         if data.count == 1 && root.can-edit: TextField {
                             y: (parent.height - self.height) / 2;
+                            // A long name must scroll inside the field, not widen the window content.
+                            min-width: 0px;
+                            preferred-width: 100px;
                             horizontal-stretch: 1;
+                            clip: true;
                             placeholder: "Name";
                             text <=> root.name-text;
                             edited => { root.dirty = true; }
