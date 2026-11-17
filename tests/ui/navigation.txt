@@ -81,3 +81,6 @@ drag 600 735 600 251
 expect selection 15 items selected
 click 400 187
 expect selection 1 item selected
+# dragging from an item (not only from empty space) also band-selects
+drag 400 251 400 347
+expect selection 4 items selected

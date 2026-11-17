@@ -65,12 +65,18 @@ component ItemTouch inherits TouchArea {
     in property <int> index;
     callback item-down(int, bool, bool, bool, length, length);
     callback item-activated(int);
+    /// Pointer position (window coordinates) while the left button drags from this item, and the release.
+    callback band-move(length, length);
+    callback band-end();
     pointer-event(e) => {
         if e.kind == PointerEventKind.down && (e.button == PointerEventButton.left || e.button == PointerEventButton.right) {
             item-down(index, e.modifiers.control, e.modifiers.shift, e.button == PointerEventButton.right,
                 self.absolute-position.x + self.mouse-x, self.absolute-position.y + self.mouse-y);
+        } else if e.kind == PointerEventKind.up || e.kind == PointerEventKind.cancel {
+            band-end();
         }
     }
+    moved => { band-move(self.absolute-position.x + self.mouse-x, self.absolute-position.y + self.mouse-y); }
     double-clicked => { item-activated(index); }
 }
 
@@ -90,31 +96,50 @@ component BandTouch inherits TouchArea {
     out property <length> bw;
     out property <length> bh;
     property <bool> armed;
+    property <bool> additive;
+    /// True when the press landed on an item: the selection is reset on the first move instead.
+    property <bool> pending;
     property <length> sx;
     property <length> sy;
-    pointer-event(e) => {
-        if e.kind == PointerEventKind.down {
-            background-down(e.button == PointerEventButton.right, e.modifiers.control || e.modifiers.shift,
-                self.absolute-position.x + self.mouse-x, self.absolute-position.y + self.mouse-y);
-            armed = e.button == PointerEventButton.left;
-            sx = self.mouse-x;
-            sy = self.mouse-y - scroll-y;
-        } else if e.kind == PointerEventKind.up || e.kind == PointerEventKind.cancel {
-            armed = false;
-            active = false;
-        }
+    /// Arms a drag from (x, y) in this area's coordinates.
+    public function press(x: length, y: length, add: bool, from-item: bool) {
+        armed = true;
+        pending = from-item;
+        additive = add;
+        sx = x;
+        sy = y - scroll-y;
     }
-    moved => {
+    public function drag(x: length, y: length) {
         if armed {
+            if pending {
+                pending = false;
+                background-down(false, additive, 0px, 0px);
+            }
             active = true;
-            bx = max(0px, min(sx, self.mouse-x));
-            bw = min(self.width, max(sx, self.mouse-x)) - bx;
-            by = max(0px, min(sy + scroll-y, self.mouse-y));
-            bh = min(self.height, max(sy + scroll-y, self.mouse-y)) - by;
+            bx = max(0px, min(sx, x));
+            bw = min(self.width, max(sx, x)) - bx;
+            by = max(0px, min(sy + scroll-y, y));
+            bh = min(self.height, max(sy + scroll-y, y)) - by;
             band(floor((by - scroll-y) / cell-h), floor((by + bh - scroll-y) / cell-h),
                 floor((bx - left) / cell-w), floor((bx + bw - left) / cell-w), cols);
         }
     }
+    public function release() {
+        armed = false;
+        active = false;
+    }
+    pointer-event(e) => {
+        if e.kind == PointerEventKind.down {
+            background-down(e.button == PointerEventButton.right, e.modifiers.control || e.modifiers.shift,
+                self.absolute-position.x + self.mouse-x, self.absolute-position.y + self.mouse-y);
+            if e.button == PointerEventButton.left {
+                press(self.mouse-x, self.mouse-y, e.modifiers.control || e.modifiers.shift, false);
+            }
+        } else if e.kind == PointerEventKind.up || e.kind == PointerEventKind.cancel {
+            release();
+        }
+    }
+    moved => { drag(self.mouse-x, self.mouse-y); }
 }
 
 component BandRect inherits Rectangle {
@@ -310,7 +335,12 @@ export component DetailsView inherits Rectangle {
                     }
                     touch := ItemTouch {
                         index: i;
-                        item-down(a, b, c, d, x, y) => { root.item-down(a, b, c, d, x, y); }
+                        item-down(a, b, c, d, x, y) => {
+                            root.item-down(a, b, c, d, x, y);
+                            if !d { bg.press(x - bg.absolute-position.x, y - bg.absolute-position.y, b || c, true); }
+                        }
+                        band-move(x, y) => { bg.drag(x - bg.absolute-position.x, y - bg.absolute-position.y); }
+                        band-end => { bg.release(); }
                         item-activated(a) => { root.item-activated(a); }
                     }
                 }
@@ -328,6 +358,8 @@ component GridCell inherits Rectangle {
     in property <bool> check-boxes;
     callback item-down(int, bool, bool, bool, length, length);
     callback item-activated(int);
+    callback band-move(length, length);
+    callback band-end();
     accessible-role: list-item;
     accessible-label: item.name;
     accessible-item-selected: item.selected;
@@ -417,6 +449,8 @@ component GridCell inherits Rectangle {
     }
     touch := ItemTouch {
         index: root.index;
+        band-move(x, y) => { root.band-move(x, y); }
+        band-end => { root.band-end(); }
         item-down(a, b, c, d, x, y) => { root.item-down(a, b, c, d, x, y); }
         item-activated(a) => { root.item-activated(a); }
     }
@@ -478,7 +512,12 @@ export component GridView inherits Rectangle {
                 icon: root.icon;
                 focused: root.list-focused && self.index == root.focus-row;
                 check-boxes: root.check-boxes;
-                item-down(i, ctl, sh, rt, x, y) => { root.item-down(i, ctl, sh, rt, x, y); }
+                item-down(i, ctl, sh, rt, x, y) => {
+                    root.item-down(i, ctl, sh, rt, x, y);
+                    if !rt { bg.press(x - bg.absolute-position.x, y - bg.absolute-position.y, ctl || sh, true); }
+                }
+                band-move(x, y) => { bg.drag(x - bg.absolute-position.x, y - bg.absolute-position.y); }
+                band-end => { bg.release(); }
                 item-activated(a) => { root.item-activated(a); }
             }
         }
