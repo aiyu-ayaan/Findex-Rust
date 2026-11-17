@@ -100,6 +100,8 @@ pub struct App {
     /// Bumped on every open and close, so late worker results are dropped.
     props_gen: u64,
     props_cancel: Cancel,
+    /// Attribute states as first read (read-only, hidden); unchanged ones are not applied.
+    props_init: (i32, i32),
     /// The transfer window was opened automatically (it then closes itself when everything is done).
     transfer_auto: bool,
     tabs: Vec<Tab>,
@@ -189,6 +191,7 @@ pub fn start(ui: AppWindow, start: Option<PathBuf>) {
         props_thumb: None,
         props_gen: 0,
         props_cancel: Cancel::default(),
+        props_init: (2, 2),
         transfer_auto: false,
         tabs: Vec::new(),
         active: 0,
@@ -609,10 +612,22 @@ impl App {
             self.props.set_name_text(info.name.into());
             self.props.set_readonly(info.readonly);
             self.props.set_hidden(info.hidden);
+            self.props_init = (info.readonly, info.hidden);
         }
     }
 
     fn props_apply(&mut self, name: String, readonly: i32, hidden: i32) {
+        // 2 means "leave as is": also for attributes the user did not touch, so a typed name wins.
+        let readonly = if readonly == self.props_init.0 {
+            2
+        } else {
+            readonly
+        };
+        let hidden = if hidden == self.props_init.1 {
+            2
+        } else {
+            hidden
+        };
         let targets = self.props_targets.clone();
         let name = name.trim().to_string();
         let rename = targets.len() == 1
@@ -2564,7 +2579,9 @@ fn gather_props(targets: &[PathBuf], cancel: &Cancel, sink: &mut dyn FnMut(Props
     };
     let mut base = PropsInfo {
         count: targets.len() as i32,
-        readonly: tri(&|i| metas[i].as_ref().is_some_and(findex_platform::is_readonly)),
+        readonly: tri(&|i| {
+            std::fs::metadata(&targets[i]).is_ok_and(|m| findex_platform::is_readonly(&m))
+        }),
         hidden: tri(&|i| findex_platform::is_hidden(&targets[i])),
         ..Default::default()
     };
@@ -2598,6 +2615,8 @@ fn gather_props(targets: &[PathBuf], cancel: &Cancel, sink: &mut dyn FnMut(Props
             base.modified = time_text(m.modified());
             base.accessed = time_text(m.accessed());
         }
+        // Show what we have at once; "Opens with" can take a moment.
+        sink(base.clone());
         if !base.is_dir {
             base.opens_with = findex_platform::default_app_name(p).unwrap_or_default();
         }
@@ -2612,15 +2631,17 @@ fn gather_props(targets: &[PathBuf], cancel: &Cancel, sink: &mut dyn FnMut(Props
         if targets.iter().all(|p| parent(p) == loc) {
             base.location = format!("All in {loc}");
         }
+        sink(base.clone());
     }
 
     let (mut bytes, mut alloc, mut files, mut folders) = (0u64, 0u64, 0u64, 0u64);
     let mut has_alloc = true;
+    // (folder, device): the walk stays on the device it started on, as `du -x` does.
     let mut stack = Vec::new();
     for (p, m) in targets.iter().zip(&metas) {
         let Some(m) = m else { continue };
         if m.is_dir() {
-            stack.push(p.clone());
+            stack.push((p.clone(), findex_platform::device_id(p)));
             folders += !single as u64;
         } else {
             files += !single as u64;
@@ -2651,7 +2672,7 @@ fn gather_props(targets: &[PathBuf], cancel: &Cancel, sink: &mut dyn FnMut(Props
         },
         ..base.clone()
     };
-    while let Some(dir) = stack.pop() {
+    while let Some((dir, dev)) = stack.pop() {
         if cancel.is_cancelled() {
             return;
         }
@@ -2663,7 +2684,10 @@ fn gather_props(targets: &[PathBuf], cancel: &Cancel, sink: &mut dyn FnMut(Props
             let Ok(m) = e.metadata() else { continue };
             if m.is_dir() {
                 folders += 1;
-                stack.push(e.path());
+                let sub = e.path();
+                if findex_platform::device_id(&sub) == dev {
+                    stack.push((sub, dev));
+                }
             } else {
                 files += 1;
                 bytes += m.len();

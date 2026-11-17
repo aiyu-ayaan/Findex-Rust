@@ -100,6 +100,8 @@ export component PropertiesWindow inherits Window {
     in-out property <int> hidden;
     /// False for the open folder and search results: name and attributes are read-only there.
     in property <bool> can-edit: true;
+    /// Edits wait for the first data, so they never apply to the previous item.
+    property <bool> editable: can-edit && data.count > 0;
     in-out property <bool> dirty;
     callback apply(string, int, int);
     callback close-requested();
@@ -177,15 +179,18 @@ export component PropertiesWindow inherits Window {
                             thumb: data.thumb;
                             has-thumb: data.has-thumb && data.count == 1;
                         }
-                        if data.count == 1 && can-edit: TextField {
+                        if data.count == 1 && root.can-edit: TextField {
                             y: (parent.height - self.height) / 2;
                             horizontal-stretch: 1;
                             placeholder: "Name";
                             text <=> root.name-text;
                             edited => { root.dirty = true; }
-                            accepted => { root.apply(root.name-text, root.readonly, root.hidden); root.close-requested(); }
+                            accepted => {
+                                if root.dirty { root.apply(root.name-text, root.readonly, root.hidden); }
+                                root.close-requested();
+                            }
                         }
-                        if data.count != 1 || !can-edit: Text {
+                        if data.count != 1 || !root.can-edit: Text {
                             text: data.count == 1 ? data.name : data.count > 1 ? data.count + " items" : "Reading...";
                             color: Theme.text-primary;
                             font-size: Theme.font-subtitle;
@@ -214,13 +219,13 @@ export component PropertiesWindow inherits Window {
                         TriCheck {
                             text: "Read-only";
                             state: root.readonly;
-                            enabled: root.can-edit;
+                            enabled: root.editable;
                             toggled(s) => { root.readonly = s; root.dirty = true; }
                         }
                         TriCheck {
                             text: "Hidden";
                             state: root.hidden;
-                            enabled: root.can-edit;
+                            enabled: root.editable;
                             toggled(s) => { root.hidden = s; root.dirty = true; }
                         }
                     }
@@ -234,15 +239,15 @@ export component PropertiesWindow inherits Window {
                     text: "OK";
                     primary: true;
                     clicked => {
-                        if root.dirty { root.apply(root.name-text, root.readonly, root.hidden); }
+                        if root.dirty && root.editable { root.apply(root.name-text, root.readonly, root.hidden); }
                         root.close-requested();
                     }
                 }
                 DialogButton { text: "Cancel"; clicked => { root.close-requested(); } }
                 DialogButton {
                     text: "Apply";
-                    opacity: root.dirty ? 1 : 0.4;
-                    clicked => { if root.dirty { root.apply(root.name-text, root.readonly, root.hidden); } }
+                    opacity: root.dirty && root.editable ? 1 : 0.4;
+                    clicked => { if root.dirty && root.editable { root.apply(root.name-text, root.readonly, root.hidden); } }
                 }
             }
         }

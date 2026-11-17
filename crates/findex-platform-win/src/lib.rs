@@ -297,7 +297,7 @@ pub fn is_readonly(meta: &std::fs::Metadata) -> bool {
 
 /// FILE_ATTRIBUTE_READONLY; on Windows `set_readonly` touches only that attribute.
 pub fn set_readonly(path: &Path, readonly: bool) -> io::Result<()> {
-    let mut perm = std::fs::symlink_metadata(path)?.permissions();
+    let mut perm = std::fs::metadata(path)?.permissions();
     if perm.readonly() != readonly {
         #[allow(clippy::permissions_set_readonly_false)]
         perm.set_readonly(readonly);

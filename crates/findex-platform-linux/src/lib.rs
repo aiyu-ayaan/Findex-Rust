@@ -92,10 +92,10 @@ pub fn is_readonly(meta: &std::fs::Metadata) -> bool {
 }
 
 /// Sets or clears the owner write bit only. `Permissions::set_readonly(false)` would make the file
-/// writable by everyone.
+/// writable by everyone. Follows symlinks: chmod acts on the target, so read the target's mode too.
 pub fn set_readonly(path: &Path, readonly: bool) -> std::io::Result<()> {
     use std::os::unix::fs::PermissionsExt;
-    let mut perm = std::fs::symlink_metadata(path)?.permissions();
+    let mut perm = std::fs::metadata(path)?.permissions();
     let mode = perm.mode();
     let new = if readonly {
         mode & !0o222
@@ -182,4 +182,36 @@ pub fn system_prefers_dark() -> bool {
         return true;
     }
     !scheme.contains("light") && get("gtk-theme").contains("dark")
+}
+
+#[cfg(test)]
+mod attr_tests {
+    use super::*;
+    use std::os::unix::fs::PermissionsExt;
+
+    #[test]
+    fn readonly_through_symlink_keeps_target_private() {
+        let dir = tempfile::tempdir().unwrap();
+        let file = dir.path().join("secret");
+        std::fs::write(&file, b"x").unwrap();
+        std::fs::set_permissions(&file, std::fs::Permissions::from_mode(0o600)).unwrap();
+        let link = dir.path().join("link");
+        std::os::unix::fs::symlink(&file, &link).unwrap();
+        set_readonly(&link, true).unwrap();
+        let mode = || std::fs::metadata(&file).unwrap().permissions().mode() & 0o777;
+        assert_eq!(mode(), 0o400);
+        set_readonly(&link, false).unwrap();
+        assert_eq!(mode(), 0o600);
+    }
+
+    #[test]
+    fn hide_and_unhide_rename_with_a_dot() {
+        let dir = tempfile::tempdir().unwrap();
+        let f = dir.path().join("a.txt");
+        std::fs::write(&f, b"").unwrap();
+        let h = set_hidden(&f, true).unwrap();
+        assert_eq!(h, dir.path().join(".a.txt"));
+        assert!(is_hidden(&h));
+        assert_eq!(set_hidden(&h, false).unwrap(), f);
+    }
 }
