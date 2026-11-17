@@ -149,6 +149,13 @@ mod tests {
     use super::*;
 
     #[test]
+    fn device_id_falls_back_to_existing_parent() {
+        let dir = tempfile::tempdir().unwrap();
+        assert_ne!(device_id(dir.path()), 0);
+        assert_eq!(device_id(&dir.path().join("new/x")), device_id(dir.path()));
+    }
+
+    #[test]
     fn lists_and_copies() {
         let dir = tempfile::tempdir().unwrap();
         std::fs::create_dir(dir.path().join("sub")).unwrap();
@@ -172,4 +179,12 @@ mod tests {
         // destination exists: refuse, never overwrite
         assert!(copy_file(&dir.path().join("a.txt"), &dst, &mut |_| true).is_err());
     }
+}
+
+/// Filesystem id (`st_dev`) of `path`, or of its nearest existing parent. Used to queue jobs per device.
+pub fn device_id(path: &Path) -> u64 {
+    use std::os::unix::fs::MetadataExt;
+    path.ancestors()
+        .find_map(|p| std::fs::metadata(p).ok())
+        .map_or(0, |m| m.dev())
 }

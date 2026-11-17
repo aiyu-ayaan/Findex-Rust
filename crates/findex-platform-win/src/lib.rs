@@ -352,3 +352,15 @@ pub fn forward_to_running(_request: &str) -> bool {
 }
 
 pub fn listen_for_instances(_on_request: impl Fn(String) + Send + Sync + 'static) {}
+
+/// Drive of `path` (its letter, or 0), used to queue jobs per device.
+pub fn device_id(path: &Path) -> u64 {
+    use std::path::{Component, Prefix};
+    match path.components().next() {
+        Some(Component::Prefix(p)) => match p.kind() {
+            Prefix::Disk(d) | Prefix::VerbatimDisk(d) => d.to_ascii_uppercase() as u64,
+            _ => 0,
+        },
+        _ => 0,
+    }
+}

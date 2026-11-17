@@ -79,7 +79,7 @@ Windows:
 Common:
 
 - Small-file batches use a worker pool so latency is hidden. Large files use a single stream, because parallel streams on an HDD slow it down.
-- Per-device write queue: one write-heavy job per physical device by default.
+- Per-device write queue: one write-heavy job per physical device by default. Implemented per filesystem (`st_dev` on Linux, drive letter on Windows), so two partitions of one disk still run in parallel [?].
 - Progress is sent to the UI at 10 Hz, never per block.
 - Speed graph uses a 1 s sliding window sampled at 4 Hz.
 - Resume after pause is exact, by byte offset.

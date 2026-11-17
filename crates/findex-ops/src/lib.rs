@@ -1,11 +1,14 @@
 //! File operations engine. Every copy, move, trash and delete is a [`Job`] reported in the one transfer panel.
 //!
-//! shortcut: one worker runs jobs in order (one write-heavy job at a time overall);
-//! per-physical-device queues come with spike S4.
+//! One worker per destination device runs its jobs in order, so a copy to a USB stick does not
+//! wait behind a copy on the SSD, and two writes to the same disk never compete.
+//! shortcut: the device is the filesystem id (`st_dev` / drive letter), not the physical disk;
+//! two partitions of one disk get separate queues. Upgrade with spike S4.
 
 use std::io;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering::Relaxed};
+use std::collections::HashMap;
 use std::sync::mpsc::{Sender, channel};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
@@ -68,36 +71,43 @@ impl Job {
 }
 
 pub struct Queue {
-    tx: Sender<Arc<Job>>,
+    /// One sender per device, each with its own worker thread.
+    workers: Mutex<HashMap<u64, Sender<Arc<Job>>>>,
+    on_finished: Arc<dyn Fn(&Job) + Send + Sync>,
     jobs: Arc<Mutex<Vec<Arc<Job>>>>,
     next_id: AtomicU64,
 }
 
-impl Queue {
-    /// `on_finished` runs on the worker thread after each job ends.
-    pub fn new(on_finished: impl Fn(&Job) + Send + 'static) -> Queue {
-        let (tx, rx) = channel::<Arc<Job>>();
-        std::thread::Builder::new()
-            .name("findex-ops".into())
-            .spawn(move || {
-                for job in rx {
-                    if !job.cancelled.load(Relaxed) {
-                        job.set_status(Status::Running);
-                        let r = run(&job);
-                        job.set_status(match r {
-                            _ if job.cancelled.load(Relaxed) => Status::Cancelled,
-                            Ok(()) => Status::Done,
-                            Err(e) => Status::Failed(e.to_string()),
-                        });
-                    } else {
-                        job.set_status(Status::Cancelled);
-                    }
-                    on_finished(&job);
+fn worker(on_finished: Arc<dyn Fn(&Job) + Send + Sync>, device: u64) -> Sender<Arc<Job>> {
+    let (tx, rx) = channel::<Arc<Job>>();
+    std::thread::Builder::new()
+        .name(format!("findex-ops-{device}"))
+        .spawn(move || {
+            for job in rx {
+                if !job.cancelled.load(Relaxed) {
+                    job.set_status(Status::Running);
+                    let r = run(&job);
+                    job.set_status(match r {
+                        _ if job.cancelled.load(Relaxed) => Status::Cancelled,
+                        Ok(()) => Status::Done,
+                        Err(e) => Status::Failed(e.to_string()),
+                    });
+                } else {
+                    job.set_status(Status::Cancelled);
                 }
-            })
-            .expect("spawn ops worker");
+                on_finished(&job);
+            }
+        })
+        .expect("spawn ops worker");
+    tx
+}
+
+impl Queue {
+    /// `on_finished` runs on a worker thread after each job ends.
+    pub fn new(on_finished: impl Fn(&Job) + Send + Sync + 'static) -> Queue {
         Queue {
-            tx,
+            workers: Default::default(),
+            on_finished: Arc::new(on_finished),
             jobs: Default::default(),
             next_id: AtomicU64::new(1),
         }
@@ -119,7 +129,13 @@ impl Queue {
             created: Mutex::new(Vec::new()),
         });
         self.jobs.lock().unwrap().push(job.clone());
-        let _ = self.tx.send(job.clone());
+        // Writes land on the destination; trash and delete work on the source's device.
+        let device = findex_platform::device_id(
+            job.dest.as_deref().or(job.sources.first().map(|p| p.as_path())).unwrap_or(Path::new("/")),
+        );
+        let mut workers = self.workers.lock().unwrap();
+        let tx = workers.entry(device).or_insert_with(|| worker(self.on_finished.clone(), device));
+        let _ = tx.send(job.clone());
         job
     }
 

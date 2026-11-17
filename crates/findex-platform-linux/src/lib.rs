@@ -9,7 +9,7 @@ mod ipc;
 
 pub use default_handler::{is_default_file_manager, set_default_file_manager};
 pub use drives::{drives, eject, mount};
-pub use fs::{copy_file, copy_symlink, list_dir};
+pub use fs::{copy_file, copy_symlink, device_id, list_dir};
 pub use ipc::{forward as forward_to_running, listen as listen_for_instances};
 
 use std::path::{Path, PathBuf};

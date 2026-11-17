@@ -62,7 +62,7 @@ Legend: `[ ]` open, `[x]` done. P0 = v1.0 blocker, P1 = v1.0 target, P2 = later.
 - [ ] Drag and drop inside app and with other apps
 - [x] Mouse side buttons (back / forward) and Esc closes the Options window
 - [x] Unified transfer panel with graph, pause, resume, cancel (separate window)
-- [ ] Copy, move, delete engine with per-device queue (engine done; one global queue for now)
+- [x] Copy, move, delete engine with per-device queue (one worker per destination filesystem; physical-disk grouping open, S4)
 - [ ] Reflink / `copy_file_range` / `CopyFile2` paths (Linux done; Windows buffered)
 - [ ] Conflict dialog with compare and apply-to-all (keep-both default only)
 - [ ] Undo and redo journal (single-step undo for rename/copy/move/trash done)
