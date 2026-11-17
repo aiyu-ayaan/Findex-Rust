@@ -7,7 +7,10 @@ use std::path::PathBuf;
 fn socket_path() -> PathBuf {
     match std::env::var_os("XDG_RUNTIME_DIR") {
         Some(d) if !d.is_empty() => PathBuf::from(d).join("findex.sock"),
-        _ => PathBuf::from(format!("/tmp/findex-{}.sock", rustix::process::getuid().as_raw())),
+        _ => PathBuf::from(format!(
+            "/tmp/findex-{}.sock",
+            rustix::process::getuid().as_raw()
+        )),
     }
 }
 

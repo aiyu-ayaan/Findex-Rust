@@ -104,7 +104,10 @@ fn main() {
     if !isolated
         && !relaunched
         && findex_platform::forward_to_running(
-            &start.as_ref().map(|p| p.display().to_string()).unwrap_or_default(),
+            &start
+                .as_ref()
+                .map(|p| p.display().to_string())
+                .unwrap_or_default(),
         )
     {
         return;

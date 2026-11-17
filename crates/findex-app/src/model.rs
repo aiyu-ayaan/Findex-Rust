@@ -280,7 +280,11 @@ impl ListingModel {
     pub fn band_begin(&self, additive: bool) {
         {
             let mut i = self.inner.borrow_mut();
-            i.band_base = if additive { i.selected.clone() } else { Vec::new() };
+            i.band_base = if additive {
+                i.selected.clone()
+            } else {
+                Vec::new()
+            };
         }
         if !additive {
             self.clear_selection();
@@ -485,8 +489,14 @@ mod tests {
     }
 
     fn model(n: usize) -> ListingModel {
-        let m = ListingModel::new(findex_thumbs::Service::new(1, std::env::temp_dir(), |_, _, _| {}));
-        let entries = (0..n).map(|k| Entry::new(format!("f{k}").into(), false, 0, 0, 0)).collect();
+        let m = ListingModel::new(findex_thumbs::Service::new(
+            1,
+            std::env::temp_dir(),
+            |_, _, _| {},
+        ));
+        let entries = (0..n)
+            .map(|k| Entry::new(format!("f{k}").into(), false, 0, 0, 0))
+            .collect();
         m.set_all(entries, (0..n as u32).collect());
         m
     }

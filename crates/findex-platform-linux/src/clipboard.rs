@@ -19,7 +19,9 @@ pub fn path_to_uri(p: &Path) -> String {
     let mut s = String::from("file://");
     for &b in p.as_os_str().as_bytes() {
         match b {
-            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'/' | b'-' | b'_' | b'.' | b'~' => s.push(b as char),
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'/' | b'-' | b'_' | b'.' | b'~' => {
+                s.push(b as char)
+            }
             _ => s.push_str(&format!("%{b:02X}")),
         }
     }
@@ -43,7 +45,10 @@ fn decode(text: &str) -> Option<(Vec<String>, bool)> {
         "copy" => false,
         _ => return None,
     };
-    let uris: Vec<String> = lines.filter(|l| l.starts_with("file://")).map(String::from).collect();
+    let uris: Vec<String> = lines
+        .filter(|l| l.starts_with("file://"))
+        .map(String::from)
+        .collect();
     (!uris.is_empty()).then_some((uris, cut))
 }
 
@@ -81,12 +86,19 @@ pub fn set_clipboard_files(paths: &[PathBuf], cut: bool) -> bool {
 pub fn get_clipboard_files() -> Option<(Vec<String>, bool)> {
     crate::with_timeout(Duration::from_secs(2), || {
         let out = if wayland() {
-            Command::new("wl-paste").args(["--no-newline", "--type", TARGET]).output()
+            Command::new("wl-paste")
+                .args(["--no-newline", "--type", TARGET])
+                .output()
         } else {
-            Command::new("xclip").args(["-selection", "clipboard", "-o", "-t", TARGET]).output()
+            Command::new("xclip")
+                .args(["-selection", "clipboard", "-o", "-t", TARGET])
+                .output()
         }
         .ok()?;
-        out.status.success().then(|| decode(&String::from_utf8_lossy(&out.stdout))).flatten()
+        out.status
+            .success()
+            .then(|| decode(&String::from_utf8_lossy(&out.stdout)))
+            .flatten()
     })
     .flatten()
 }
@@ -99,7 +111,10 @@ mod tests {
     fn round_trips_paths_with_spaces() {
         let t = encode(&[PathBuf::from("/a b/ü.txt")], true);
         assert_eq!(t, "cut\nfile:///a%20b/%C3%BC.txt");
-        assert_eq!(decode(&t), Some((vec!["file:///a%20b/%C3%BC.txt".into()], true)));
+        assert_eq!(
+            decode(&t),
+            Some((vec!["file:///a%20b/%C3%BC.txt".into()], true))
+        );
         assert_eq!(decode("hello"), None);
     }
 }

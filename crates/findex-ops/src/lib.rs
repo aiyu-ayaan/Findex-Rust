@@ -5,10 +5,10 @@
 //! shortcut: the device is the filesystem id (`st_dev` / drive letter), not the physical disk;
 //! two partitions of one disk get separate queues. Upgrade with spike S4.
 
+use std::collections::HashMap;
 use std::io;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering::Relaxed};
-use std::collections::HashMap;
 use std::sync::mpsc::{Sender, channel};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
@@ -131,10 +131,15 @@ impl Queue {
         self.jobs.lock().unwrap().push(job.clone());
         // Writes land on the destination; trash and delete work on the source's device.
         let device = findex_platform::device_id(
-            job.dest.as_deref().or(job.sources.first().map(|p| p.as_path())).unwrap_or(Path::new("/")),
+            job.dest
+                .as_deref()
+                .or(job.sources.first().map(|p| p.as_path()))
+                .unwrap_or(Path::new("/")),
         );
         let mut workers = self.workers.lock().unwrap();
-        let tx = workers.entry(device).or_insert_with(|| worker(self.on_finished.clone(), device));
+        let tx = workers
+            .entry(device)
+            .or_insert_with(|| worker(self.on_finished.clone(), device));
         let _ = tx.send(job.clone());
         job
     }

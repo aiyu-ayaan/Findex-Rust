@@ -25,20 +25,28 @@ const GNOME_SCHEMA: &str = "org.gnome.settings-daemon.plugins.media-keys";
 
 fn gsettings(args: &[&str]) -> Option<String> {
     let out = Command::new("gsettings").args(args).output().ok()?;
-    out.status.success().then(|| String::from_utf8_lossy(&out.stdout).trim().to_string())
+    out.status
+        .success()
+        .then(|| String::from_utf8_lossy(&out.stdout).trim().to_string())
 }
 
 /// GNOME: makes sure `<Super>e` opens the home folder (and so the default file manager).
 /// The old value is saved first, so `--repair` can restore it. No-op off GNOME.
 fn bind_super_e() {
-    let Some(cur) = gsettings(&["get", GNOME_SCHEMA, "home"]) else { return };
+    let Some(cur) = gsettings(&["get", GNOME_SCHEMA, "home"]) else {
+        return;
+    };
     if cur.contains("<Super>e") {
         return;
     }
     let saved = backup_file().with_file_name("previous-home-key");
     let _ = std::fs::create_dir_all(saved.parent().unwrap());
     let _ = std::fs::write(&saved, &cur);
-    let new = if cur.contains("[]") { "['<Super>e']".to_string() } else { cur.replacen('[', "['<Super>e', ", 1) };
+    let new = if cur.contains("[]") {
+        "['<Super>e']".to_string()
+    } else {
+        cur.replacen('[', "['<Super>e', ", 1)
+    };
     gsettings(&["set", GNOME_SCHEMA, "home", &new]);
 }
 
