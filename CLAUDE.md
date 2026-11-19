@@ -19,6 +19,7 @@ Full detail lives in `development/docs/`. This file is the compiled summary. Whe
 | `development/docs/07-ui-design-language.md` | Any UI work: tokens, metrics, components, motion, accessibility |
 | `development/docs/08-roadmap.md` | Spikes, milestones, risks, open questions |
 | `development/docs/09-release.md` | Release markers, workflow, installer |
+| `development/docs/10-ecosystem.md` | Findex Link with the Android app: protocol, pairing, security (keep in sync with the Android repo's `ECOSYSTEM.md`) |
 | `development/TODO.md` | What to do next |
 
 ## Product requirements (from the owner)

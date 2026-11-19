@@ -63,7 +63,7 @@ HTTP/1.1 over TLS, one request per connection (`Connection: close`). The default
 | `GET /v1/list?path=` | `{items: [{name, dir, size, mtime}]}`. `mtime` is Unix milliseconds. `/` lists the roots. |
 | `GET /v1/stat?path=` | One item. |
 | `GET /v1/file?path=` | File bytes. `Range: bytes=a-b` gives `206` with `Content-Range`, which is what lets video and audio seek (streaming). |
-| `PUT /v1/file?path=` | Create or replace a file (written to a hidden part file, then renamed). |
+| `PUT /v1/file?path=` | Create or replace a file (written to a hidden part file, then renamed). The body has a `Content-Length` or is `Transfer-Encoding: chunked`. The desktop server accepts both; the Android server needs a length (the desktop client always sends one). |
 | `POST /v1/mkdir?path=` / `/v1/delete?path=` / `/v1/rename?path=&to=` | Delete goes to the recycle bin and is never permanent. Rename never overwrites. |
 | `POST /v1/send?name=` | Push a file to the inbox (`Downloads/Findex`). A taken name gets ` (2)`. |
 | `POST /v1/text` | Push text: it is copied to the clipboard and announced. |
@@ -71,7 +71,7 @@ HTTP/1.1 over TLS, one request per connection (`Connection: close`). The default
 
 Paths are virtual: `/<root name>/<relative path>`. Components `.`, `..`, empty names and names containing `/ \ : NUL` are refused. On the desktop, the resolved path must stay inside its root after symlinks are followed (canonicalised). Roots:
 
-- Desktop: `Home`. Shortcut: other drives are not exposed yet.
+- Desktop: `Home` and `Received` (the inbox, `Downloads/Findex`). A `PUT` into `Received` counts as a send and is announced like `/v1/send`; Android's "Send to computer" uses it, so the copy runs in the normal operation queue. Shortcut: other drives are not exposed yet.
 - Android: `Internal storage` plus one root per SD card or USB volume.
 
 ## 4. Where the code is
@@ -114,6 +114,6 @@ flowchart LR
 
 - A file or folder can't be copied between two phone folders directly. Copy it to the PC first.
 - Phone thumbnails are not fetched over the link yet: phone folders show icons only.
-- The desktop exposes only Home. Android exposes every storage volume.
+- The desktop exposes only Home and its inbox. Android exposes every storage volume.
 - No Universal Clipboard (automatic clipboard sync) and no Handoff. Text can be sent by hand.
 - mDNS discovery between the Android emulator and the host does not work (NAT). Pair by typed address there.

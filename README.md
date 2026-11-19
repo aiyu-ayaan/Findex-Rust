@@ -11,7 +11,7 @@
 ![Linux](https://img.shields.io/badge/Linux-x86__64-FCC624?logo=linux&logoColor=black)
 ![Windows](https://img.shields.io/badge/Windows-10%20%7C%2011-0078D4?logo=windows&logoColor=white)
 
-The desktop edition of [Findex](https://github.com/aiyu-ayaan/Findex), the Android file explorer. A fast, native file explorer written in Rust that looks and feels like the **Windows 11 File Explorer**, on Linux and on Windows: tabs, every Explorer view mode, fuzzy search across subfolders, thumbnails, a Folder Options window, light and dark themes with translucent Mica-style surfaces, and one transfer window for every copy, move and delete. It can be set as the default file manager, so folders and **Super+E** open in Findex.
+The desktop edition of [Findex](https://github.com/aiyu-ayaan/Findex), the Android file explorer. A fast, native file explorer written in Rust that looks and feels like the **Windows 11 File Explorer**, on Linux and on Windows: tabs, every Explorer view mode, fuzzy search across subfolders, thumbnails, a Folder Options window, light and dark themes with translucent Mica-style surfaces, and one transfer window for every copy, move and delete. It can be set as the default file manager, so folders and **Super+E** open in Findex. It also pairs with Findex on your phone: phone storage shows up next to your drives, and files go both ways over an encrypted link.
 
 > **Status: early alpha.** Linux is built and tested end to end (GNOME, X11). The Windows build compiles in CI but has not been run on real hardware yet. Mica, the Win+E hook and default-app registration on Windows are still open (see the roadmap).
 
@@ -71,6 +71,12 @@ All screenshots come from the end-to-end UI test runs (`tests/ui`).
 - Delete goes to the Trash, with **Undo**. `Shift+Delete` asks first, with the safe button focused.
 - New folder and new text document, rename, copy as path, cut and paste between tabs.
 
+### Phones (Findex Link)
+- Pair with **[Findex for Android](https://github.com/aiyu-ayaan/Findex)**: the phone shows under **Phones** in the navigation pane, and its storage (with usage bars) on **This PC**.
+- Phone folders open in normal tabs. You can open files, copy and paste both ways, rename, make folders and delete (to the phone's Recycle Bin).
+- **Send to phone** on any file. Files from the phone land in `Downloads/Findex`, and text from the phone goes to the clipboard.
+- Encrypted with TLS. Each side pins the other's certificate after a one-time pairing, where both screens show the same 6-digit code. Turn it off in **Options > Findex > Phones**.
+
 ### Drives
 - **This PC** shows mounted volumes, removable drives, network shares (NFS, SMB, SSHFS, GVfs) and **unmounted partitions** (click to mount through udisks2), with usage bars and a low-space warning.
 - Every free-space probe is timeout-guarded, so a dead network share can't freeze the app.
@@ -85,6 +91,21 @@ All screenshots come from the end-to-end UI test runs (`tests/ui`).
 - **View**: never thumbnails, full path in the title, hide empty drives, hide known extensions, restore tabs, drive letters and mount points, status bar, check boxes, hidden files, typing goes to the search box or selects, navigation pane sections.
 - **Search**: subfolders, hidden files.
 - **Findex**: theme, transparency, compact view, default file manager.
+
+---
+
+## 🔗 Findex ecosystem
+
+| | Desktop (this repo) | Android |
+|---|---|---|
+| App | **Findex for Linux and Windows** | **[Findex](https://github.com/aiyu-ayaan/Findex)** for Android (Material 3 Expressive) |
+| Sees the other device | **Phones** in the navigation pane and on This PC | **Computers** tab on the phone's Home: this PC opens in the phone's Explorer |
+| Copy both ways | Copy, paste or **Send to phone** | Copy, paste or **Send to computer** (lands in `Downloads/Findex` here) |
+| Streaming | Phone files open on the PC | Videos and music on this PC stream to the phone with seeking |
+
+**Pair a phone.** Install Findex on the phone. On the phone, open **Home > Computers** and tap this PC under **Nearby**, or use **Pair by address**. Here you can also choose **See more (⋯) > Pair a phone**. Check that both screens show the same 6-digit code, then accept on both.
+
+The design is modelled on Apple's AirDrop and Continuity: a long-term identity certificate per device, mDNS discovery (`_findex._tcp`), TLS with certificate pinning, numeric-comparison pairing with hash commitments, and a bearer token per pairing. The protocol and the comparison with Apple are in [`development/docs/10-ecosystem.md`](development/docs/10-ecosystem.md). Paired phones can reach only your Home folder and the `Downloads/Findex` inbox, and only while Findex is running.
 
 ---
 
@@ -114,6 +135,7 @@ graph TD
     platform --> linux["findex-platform-linux<br/>getdents64, mountinfo, udisks2, reflink, xdg"]
     platform --> win["findex-platform-win<br/>FindFirstFileExW, drives, Mica, shell"]
     app & ops & scan --> core["findex-core<br/>entries, natural sort, history, fuzzy"]
+    app --> link["findex-link<br/>Findex Link: identity, pairing, TLS server and client, mDNS"]
 ```
 
 The UI thread never touches the disk. Listing, sorting, search, thumbnails, drive probes and file operations run on worker threads, and every one of them can be cancelled. Platform code lives only in the `findex-platform-*` crates.

@@ -35,6 +35,7 @@ findex-rust/
     findex-ops/             # copy/move/delete engine, job queue, conflicts, undo log
     findex-thumbs/          # decode, resize, cache, scheduler
     findex-scan/            # recursive walker, disk analyzer, duplicate finder, cleanup rules
+    findex-link/            # Findex Link with the Android app: identity, pairing, TLS server/client, mDNS (see 10-ecosystem.md)
     findex-index/           # search index (P2)
     findex-ui/              # Slint UI, view-models, theme, shortcuts
     findex-app/             # main binary, single instance, session restore, CLI
