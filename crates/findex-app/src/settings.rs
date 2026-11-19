@@ -37,6 +37,8 @@ pub struct Settings {
     // Folder Options: Updates
     /// Offer a new release in a dialog at startup.
     pub update_check: bool,
+    /// Findex Link: run the server and discovery so paired phones can reach this PC.
+    pub link_enabled: bool,
     /// 0 alpha, 1 beta, 2 stable; defaults to the stage of the running build.
     pub update_channel: i32,
     /// Version the user answered "Later" to; it is not offered again at startup.
@@ -76,6 +78,7 @@ impl Default for Settings {
             search_subfolders: true,
             search_hidden: false,
             update_check: true,
+            link_enabled: true,
             update_channel: crate::update::channel_of(crate::update::VERSION),
             update_skipped: String::new(),
             tabs: Vec::new(),
@@ -115,7 +118,8 @@ macro_rules! bool_keys {
             nav_trash,
             search_subfolders,
             search_hidden,
-            update_check
+            update_check,
+            link_enabled
         )
     };
 }
@@ -219,6 +223,7 @@ impl Settings {
             compact: self.compact,
             update_check: self.update_check,
             update_channel: self.update_channel,
+            link_enabled: self.link_enabled,
         }
     }
 
@@ -246,6 +251,7 @@ impl Settings {
         self.transparency = o.transparency;
         self.compact = o.compact;
         self.update_check = o.update_check;
+        self.link_enabled = o.link_enabled;
         self.update_channel = o.update_channel.clamp(0, 2);
     }
 }
@@ -269,6 +275,7 @@ mod tests {
             single_click: true,
             nav_trash: false,
             update_check: false,
+            link_enabled: false,
             update_channel: 0,
             update_skipped: "0.0.2-beta.1".into(),
             tabs: vec![PathBuf::from("/tmp/a b"), PathBuf::from("/home")],
@@ -280,6 +287,6 @@ mod tests {
         let mut o = Settings::default();
         o.set_options(&s.to_options());
         assert!(o.single_click && !o.nav_trash && o.theme == 2);
-        assert!(!o.update_check && o.update_channel == 0);
+        assert!(!o.update_check && o.update_channel == 0 && !o.link_enabled);
     }
 }

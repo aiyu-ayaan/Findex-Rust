@@ -102,6 +102,11 @@ fn udev_props(majmin: &str) -> HashMap<String, String> {
         .collect()
 }
 
+/// (total, free) bytes of the volume holding `path`, or zeros when the probe fails or times out.
+pub fn volume_space(path: &std::path::Path) -> (u64, u64) {
+    space(path.to_path_buf())
+}
+
 /// (total, free) bytes, or zeros when the probe fails or times out.
 fn space(path: PathBuf) -> (u64, u64) {
     crate::with_timeout(PROBE_TIMEOUT, move || {

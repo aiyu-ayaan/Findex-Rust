@@ -59,6 +59,12 @@ export component AppWindow inherits Window {
     in property <[NavItem]> nav-items;
     in property <[DriveData]> drives;
     in property <[DriveData]> network-drives;
+    // Findex Link: phone storage tiles, and where the tab is.
+    in property <[DriveData]> phone-drives;
+    in property <bool> phones-root;
+    in property <bool> in-phone;
+    in property <int> phone-count;
+    in property <string> link-text;
     in property <[JobData]> jobs;
     in property <int> active-jobs;
     in property <float> jobs-progress;
@@ -130,6 +136,12 @@ export component AppWindow inherits Window {
     callback show-transfers();
     callback show-options();
     callback show-properties();
+    callback phone-drive-open(int);
+    callback pair-phone();
+    callback pair-submit(string);
+    callback link-answer(bool);
+    callback send-to-phone();
+    callback send-to-phone-named(string);
 
     // ---- functions Rust calls ----
     public function show-rename(name: string) {
@@ -156,6 +168,15 @@ export component AppWindow inherits Window {
         if dialog-kind == 4 { dialog-kind = 0; list-scope.focus(); }
     }
     public function focus-list() { list-scope.focus(); }
+    /// Findex Link dialogs: 5 pair (address), 6 confirm code, 7 incoming pairing, 8 choose a phone.
+    public function show-link-dialog(kind: int, input: string) {
+        dialog-kind = kind;
+        dialog-input = input;
+        dialog.open-focus();
+    }
+    public function close-link-dialog(kind: int) {
+        if dialog-kind == kind { dialog-kind = 0; list-scope.focus(); }
+    }
     /// Puts text on the system clipboard (Slint exposes the clipboard through text inputs).
     public function copy-text(t: string) {
         clip.text = t;
@@ -172,7 +193,7 @@ export component AppWindow inherits Window {
         context-menu.show();
     }
 
-    property <int> dialog-kind; // 0 none, 1 rename, 2 delete permanently, 3 rename drive, 4 update
+    property <int> dialog-kind; // 0 none, 1 rename, 2 delete permanently, 3 rename drive, 4 update, 5-8 Findex Link
     in property <string> update-version;
     in property <string> update-installed;
     in property <bool> update-self-install;
@@ -294,7 +315,9 @@ export component AppWindow inherits Window {
                         if root.this-pc: ThisPcPage {
                             drives: root.drives;
                             network: root.network-drives;
+                            phones: root.phone-drives;
                             open-drive(net, i) => { root.drive-open(net, i); }
+                            open-phone(i) => { root.phone-drive-open(i); }
                             eject-drive(i) => { root.drive-eject(i); }
                             drive-menu(net, i, x, y) => {
                                 root.drive-net = net;
@@ -345,11 +368,19 @@ export component AppWindow inherits Window {
                                 }
                             }
                             Text {
-                                text: root.error-text != "" ? root.error-text : root.search-mode ? "No items match your search." : "This folder is empty.";
+                                text: root.error-text != "" ? root.error-text : root.search-mode ? "No items match your search." : root.phones-root ? "No phones yet. Open Findex on your phone, go to Computers, and pair with this PC. Or pair from here." : "This folder is empty.";
                                 color: Theme.text-primary;
                                 horizontal-alignment: center;
                                 wrap: word-wrap;
                                 accessible-role: AccessibleRole.text;
+                            }
+                            if root.phones-root && root.error-text == "": HorizontalLayout {
+                                alignment: center;
+                                DialogButton {
+                                    text: "Pair a phone";
+                                    primary: true;
+                                    clicked => { root.pair-phone(); }
+                                }
                             }
                             if root.error-text != "": HorizontalLayout {
                                 alignment: center;
@@ -458,6 +489,7 @@ export component AppWindow inherits Window {
                 MenuRow { icon: Icons.copy; text: "Copy as path"; shortcut: "Ctrl+Shift+C"; enabled: root.selected-count > 0; clicked => { root.copy-path(); } }
                 MenuRow { icon: Icons.undo; text: "Undo"; shortcut: "Ctrl+Z"; enabled: root.toast-undo; clicked => { root.undo(); } }
                 MenuRow { icon: Icons.transfer; text: "Transfers"; clicked => { root.show-transfers(); } }
+                MenuRow { icon: Icons.phone; text: "Pair a phone"; clicked => { root.pair-phone(); } }
                 HDivider { }
                 MenuRow { icon: Icons.settings; text: "Options"; clicked => { root.show-options(); } }
             }
@@ -497,6 +529,7 @@ export component AppWindow inherits Window {
                 if root.menu-on-item: MenuRow { icon: Icons.open; text: "Open"; shortcut: "Enter"; clicked => { root.item-activated(root.focus-row); } }
                 if root.menu-on-item && root.in-trash: MenuRow { icon: Icons.undo; text: "Restore"; clicked => { root.restore-items(); } }
                 if root.menu-on-item: MenuRow { icon: Icons.add; text: "Open in new tab"; enabled: root.details.kind == 0; clicked => { root.open-in-new-tab(); } }
+                if root.menu-on-item && !root.in-phone && root.phone-count > 0: MenuRow { icon: Icons.phone; text: "Send to phone"; clicked => { root.send-to-phone(); } }
                 if root.menu-on-item: MenuRow { icon: Icons.copy; text: "Copy as path"; shortcut: "Ctrl+Shift+C"; clicked => { root.copy-path(); } }
                 if root.menu-on-item: MenuRow { icon: Icons.info; text: "Properties"; clicked => { root.show-properties(); } }
                 if root.menu-on-item: HDivider { }
@@ -504,6 +537,7 @@ export component AppWindow inherits Window {
                 if !root.menu-on-item: MenuRow { icon: Icons.view-details; text: "View"; clicked => { root.pop-x = root.menu-x; root.pop-y = root.menu-y; view-popup.show(); } }
                 if !root.menu-on-item: MenuRow { icon: Icons.sort; text: "Sort by"; clicked => { root.pop-x = root.menu-x; root.pop-y = root.menu-y; sort-popup.show(); } }
                 if !root.menu-on-item: MenuRow { icon: Icons.refresh; text: "Refresh"; shortcut: "F5"; clicked => { root.refresh(); } }
+                if !root.menu-on-item && root.phones-root: MenuRow { icon: Icons.phone; text: "Pair a phone"; clicked => { root.pair-phone(); } }
                 if !root.menu-on-item: HDivider { }
                 if !root.menu-on-item: MenuRow { icon: Icons.paste; text: "Paste"; shortcut: "Ctrl+V"; enabled: root.can-paste && !root.this-pc && !root.search-mode; clicked => { root.paste(); } }
                 if !root.menu-on-item: MenuRow { icon: Icons.new-folder; text: "New folder"; shortcut: "Ctrl+Shift+N"; enabled: !root.this-pc && !root.search-mode; clicked => { root.new-folder(); } }
@@ -517,25 +551,32 @@ export component AppWindow inherits Window {
     // ---- modal dialogs ----
     dialog := Dialog {
         visible: root.dialog-kind != 0;
-        title: root.dialog-kind == 1 ? "Rename" : root.dialog-kind == 3 ? "Rename drive" : root.dialog-kind == 4 ? "Findex " + root.update-version + " is available" : "Delete permanently?";
-        message: root.dialog-kind == 4 ? "You have " + root.update-installed + ". " + (root.update-self-install ? "Findex restarts when the download is done." : "The installer is saved to Downloads and opened.") : root.dialog-kind == 3 ? "Leave the name empty to restore the original one." : root.dialog-kind == 2 ? (root.delete-count == 1 ? "This item will be deleted and cannot be restored from the Trash." : root.delete-count + " items will be deleted and cannot be restored from the Trash.") : "";
-        primary-text: root.dialog-kind == 1 || root.dialog-kind == 3 ? "Rename" : root.dialog-kind == 4 ? (root.update-self-install ? "Download and restart" : "Download") : "Delete";
-        cancel-text: root.dialog-kind == 4 ? "Later" : "Cancel";
+        title: root.dialog-kind == 1 ? "Rename" : root.dialog-kind == 3 ? "Rename drive" : root.dialog-kind == 4 ? "Findex " + root.update-version + " is available"
+            : root.dialog-kind == 5 ? "Pair a phone" : root.dialog-kind == 6 ? "Check the code" : root.dialog-kind == 7 ? "Pairing request" : root.dialog-kind == 8 ? "Send to phone" : "Delete permanently?";
+        message: root.dialog-kind == 4 ? "You have " + root.update-installed + ". " + (root.update-self-install ? "Findex restarts when the download is done." : "The installer is saved to Downloads and opened.") : root.dialog-kind == 3 ? "Leave the name empty to restore the original one." : root.dialog-kind == 2 ? (root.delete-count == 1 ? "This item will be deleted and cannot be restored from the Trash." : root.delete-count + " items will be deleted and cannot be restored from the Trash.")
+            : root.dialog-kind >= 5 ? root.link-text : "";
+        primary-text: root.dialog-kind == 1 || root.dialog-kind == 3 ? "Rename" : root.dialog-kind == 4 ? (root.update-self-install ? "Download and restart" : "Download")
+            : root.dialog-kind == 5 || root.dialog-kind == 6 || root.dialog-kind == 7 ? "Pair" : root.dialog-kind == 8 ? "Send" : "Delete";
+        cancel-text: root.dialog-kind == 4 ? "Later" : root.dialog-kind == 7 ? "Decline" : "Cancel";
         progress: root.dialog-kind == 4 ? root.update-progress : -1;
         danger: root.dialog-kind == 2;
-        has-input: root.dialog-kind == 1 || root.dialog-kind == 3;
-        input-label: root.dialog-kind == 3 ? "Drive name" : "New name";
+        has-input: root.dialog-kind == 1 || root.dialog-kind == 3 || root.dialog-kind == 5 || root.dialog-kind == 8;
+        input-label: root.dialog-kind == 3 ? "Drive name" : root.dialog-kind == 5 ? "Phone address (IP or IP:port)" : root.dialog-kind == 8 ? "Phone name" : "New name";
         input-text <=> root.dialog-input;
         primary => {
             if root.dialog-kind == 1 { root.rename-commit(root.dialog-input); }
             if root.dialog-kind == 3 { root.drive-rename-commit(root.dialog-input); }
             if root.dialog-kind == 2 { root.delete-confirmed(); }
             if root.dialog-kind == 4 { root.update-install(); return; }
+            if root.dialog-kind == 5 { root.pair-submit(root.dialog-input); }
+            if root.dialog-kind == 6 || root.dialog-kind == 7 { root.link-answer(true); }
+            if root.dialog-kind == 8 { root.send-to-phone-named(root.dialog-input); }
             root.dialog-kind = 0;
             list-scope.focus();
         }
         dismiss => {
             if root.dialog-kind == 4 { root.update-later(); }
+            if root.dialog-kind == 6 || root.dialog-kind == 7 { root.link-answer(false); }
             root.dialog-kind = 0;
             list-scope.focus();
         }

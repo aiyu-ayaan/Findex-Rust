@@ -36,6 +36,8 @@ export struct Options {
     // Updates
     update-check: bool,
     update-channel: int,
+    // Phones (Findex Link)
+    link-enabled: bool,
 }
 
 /// One open-source project in About > Acknowledgements.
@@ -228,6 +230,10 @@ export component OptionsWindow inherits Window {
         { name: "md-5", license: "MIT OR Apache-2.0", url: "https://github.com/RustCrypto/hashes" },
         { name: "raw-window-handle", license: "MIT OR Apache-2.0 OR Zlib", url: "https://github.com/rust-windowing/raw-window-handle" },
         { name: "windows-sys", license: "MIT OR Apache-2.0", url: "https://github.com/microsoft/windows-rs" },
+        { name: "rustls (Findex Link encryption)", license: "Apache-2.0 OR ISC OR MIT", url: "https://github.com/rustls/rustls" },
+        { name: "ring", license: "Apache-2.0 AND ISC", url: "https://github.com/briansmith/ring" },
+        { name: "rcgen", license: "MIT OR Apache-2.0", url: "https://github.com/rustls/rcgen" },
+        { name: "mdns-sd (Findex Link discovery)", license: "Apache-2.0 OR MIT", url: "https://github.com/keepsimple1/mdns-sd" },
     ];
     property <[Credit]> assets: [
         { name: "Inter", license: "OFL-1.1", url: "https://github.com/rsms/inter" },
@@ -370,6 +376,10 @@ export component OptionsWindow inherits Window {
                                     clicked => { root.toggle-default-fm(); }
                                 }
                             }
+                            Rectangle { height: 6px; }
+                            SectionTitle { text: "Phones (Findex Link)"; }
+                            Check { text: "Let phones running Findex find, pair with and browse this PC"; checked: opts.link-enabled; toggled => { opts.link-enabled = self.checked; } }
+                            Text { text: "Paired phones reach your Home folder over an encrypted connection on this network. Files they send land in Downloads/Findex."; color: Theme.text-secondary; wrap: word-wrap; }
                         }
 
                         if page == 4: VerticalLayout {
@@ -449,6 +459,7 @@ export component OptionsWindow inherits Window {
                             Rectangle { height: 4px; }
                             LinkRow { title: "Source code"; subtitle: "github.com/aiyu-ayaan/Findex-Rust"; clicked => { root.open-url(repo-url); } }
                             LinkRow { title: "License"; subtitle: "Apache-2.0"; clicked => { root.open-url(repo-url + "/blob/master/LICENSE"); } }
+                            LinkRow { title: "Findex for Android"; subtitle: "Pair your phone: browse it here, send files both ways. github.com/aiyu-ayaan/Findex"; clicked => { root.open-url("https://github.com/aiyu-ayaan/Findex"); } }
                             LinkRow { title: "Acknowledgements"; subtitle: "The libraries, font and icons Findex is built with"; chevron: true; clicked => { page = 7; } }
                             Rectangle { height: 10px; }
                             SectionTitle { text: "Developer"; }

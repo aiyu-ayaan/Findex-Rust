@@ -14,6 +14,8 @@ use findex_ui::*;
 use slint::platform::Key;
 use slint::{ComponentHandle, Image, Model, ModelRc, SharedString, Timer, TimerMode, VecModel};
 
+mod link;
+
 use crate::model::ListingModel;
 use crate::settings::Settings;
 use crate::update::{self, Installed, Offer};
@@ -137,6 +139,8 @@ pub struct App {
     update_busy: bool,
     /// The updated AppImage to start once this process has saved its session.
     relaunch: Option<PathBuf>,
+    /// Findex Link: paired phones, server and discovery.
+    link: link::LinkState,
 }
 
 /// Stable identity of a drive: block device, else mount path.
@@ -254,6 +258,7 @@ pub fn start(ui: AppWindow, start: Option<PathBuf>) {
         update_checking: false,
         update_busy: false,
         relaunch: None,
+        link: link::LinkState::default(),
     };
     app.apply_settings();
     let restored: Vec<PathBuf> = if start.is_none() && app.settings.restore_tabs {
@@ -289,6 +294,7 @@ pub fn start(ui: AppWindow, start: Option<PathBuf>) {
     wire(&ui);
     wire_mouse_buttons(&ui);
     spawn_drive_watcher();
+    with_app(|app| app.link_start());
     std::thread::spawn(|| {
         let is_default = findex_platform::is_default_file_manager();
         post(move |app| app.set_default_fm_state(is_default));
@@ -450,6 +456,14 @@ fn wire(ui: &AppWindow) {
     on!(on_update_install, |app| app.install_update());
     on!(on_update_later, |app| app.update_later());
     on!(on_show_properties, |app| app.show_properties());
+    on!(on_phone_drive_open, |app, i| app
+        .phone_drive_open(i as usize));
+    on!(on_pair_phone, |app| app.pair_phone());
+    on!(on_pair_submit, |app, a| app.pair_submit(a.to_string()));
+    on!(on_link_answer, |app, yes| app.link_answer(yes));
+    on!(on_send_to_phone, |app| app.send_to_phone());
+    on!(on_send_to_phone_named, |app, n| app
+        .send_to_phone_named(n.to_string()));
     ui.on_key(move |text, ctrl, shift, alt, typing| {
         let mut handled = false;
         with_app(|app| handled = app.key(&text, ctrl, shift, alt, typing));
@@ -541,7 +555,11 @@ impl App {
 
     fn apply_options(&mut self, o: &Options) {
         let old_theme = self.settings.theme;
+        let old_link = self.settings.link_enabled;
         self.settings.set_options(o);
+        if self.settings.link_enabled != old_link {
+            self.link_start();
+        }
         let theme = self.settings.theme;
         self.apply_settings();
         if theme == 0 && old_theme != 0 {
@@ -591,6 +609,12 @@ impl App {
 
     /// Opens Properties for the selection, or for the open folder when nothing is selected.
     fn show_properties(&mut self) {
+        if self.tab().path.as_deref().is_some_and(link::is_remote) {
+            return self.toast(
+                "Properties aren't available for phone files yet.".into(),
+                false,
+            );
+        }
         let sel = self.tab().model.selected_entries();
         let (targets, can_edit) = if sel.is_empty() {
             let Some(p) = self.tab().path.clone() else {
@@ -937,11 +961,36 @@ impl App {
             tab.loading = false;
             tab.model.reset(PathBuf::new(), generation, show_hidden);
             self.refresh_ui();
+            // This PC shows phone storage: ask the phones again.
+            self.link_refresh_infos();
             return;
         };
         tab.loading = true;
         tab.model.reset(path.clone(), generation, show_hidden);
         let (cancel, sort) = (tab.cancel.clone(), tab.sort);
+        if link::is_remote(&path) {
+            let remote = self.remote_list(&path);
+            std::thread::spawn(move || {
+                let r = remote
+                    .ok_or_else(|| "Findex Link is off. Turn on Phones in Options.".to_string())
+                    .and_then(|r| r.list());
+                if cancel.is_cancelled() {
+                    return;
+                }
+                post(move |app| {
+                    let msg = match r {
+                        Ok(all) => {
+                            let order = findex_core::sort_order(&all, sort);
+                            Listing::Full(all, order)
+                        }
+                        Err(e) => Listing::Error(e),
+                    };
+                    app.on_listing(generation, msg)
+                });
+            });
+            self.refresh_ui();
+            return;
+        }
         std::thread::Builder::new()
             .name("findex-list".into())
             .spawn(move || {
@@ -1047,6 +1096,7 @@ impl App {
             .path
             .as_ref()
             .and_then(|p| p.parent())
+            .filter(|p| !p.as_os_str().is_empty())
             .map(Path::to_path_buf)
         {
             let child = self
@@ -1092,6 +1142,8 @@ impl App {
         let tab = self.tab();
         let ui = &self.ui;
         ui.set_this_pc(tab.path.is_none());
+        ui.set_phones_root(tab.path.as_deref() == Some(Path::new(link::PHONES)));
+        ui.set_in_phone(tab.path.as_deref().is_some_and(link::is_remote));
         ui.set_in_trash(tab.path.is_some() && tab.path == findex_platform::trash_dir());
         ui.set_loading(tab.loading);
         ui.set_error_text(tab.error.clone().into());
@@ -1261,6 +1313,24 @@ impl App {
                 push(&mut items, &d.label, icon, 1, cur, NavTarget::Drive(i));
             }
         }
+        if self.link_on() {
+            let phones = link::phones_root();
+            push(&mut items, "", "", 2, false, NavTarget::None);
+            push(
+                &mut items,
+                "Phones",
+                "phone",
+                0,
+                current.as_ref() == Some(&phones),
+                NavTarget::Path(phones.clone()),
+            );
+            for p in self.link_peer_names() {
+                let path = phones.join(&p);
+                let cur = current.as_ref() == Some(&path);
+                push(&mut items, &p, "phone", 1, cur, NavTarget::Path(path));
+            }
+        }
+        let s = &self.settings;
         if let Some(trash) = findex_platform::trash_dir().filter(|t| s.nav_trash && t.is_dir()) {
             push(&mut items, "", "", 2, false, NavTarget::None);
             push(
@@ -1522,6 +1592,8 @@ impl App {
             } else {
                 self.navigate(Some(path), true);
             }
+        } else if link::is_remote(&path) {
+            self.link_open(path);
         } else {
             std::thread::spawn(move || {
                 if let Err(err) = findex_platform::open_default(&path) {
@@ -1654,6 +1726,9 @@ impl App {
         if query.trim().is_empty() {
             return;
         }
+        if self.tab().path.as_deref().is_some_and(link::is_remote) {
+            return self.toast("Search isn't available in phone folders yet.".into(), false);
+        }
         let generation = self.next_generation;
         self.next_generation += 1;
         let show_hidden = self.settings.show_hidden || self.settings.search_hidden;
@@ -1720,6 +1795,9 @@ impl App {
         }
         self.clipboard = Some((paths.clone(), cut));
         self.ui.set_can_paste(true);
+        if paths.iter().any(|p| link::is_remote(p)) {
+            return;
+        }
         // Share with other file managers; the internal copy above stays the fallback.
         std::thread::spawn(move || {
             findex_platform::set_clipboard_files(&paths, cut);
@@ -1750,15 +1828,22 @@ impl App {
         }
         // Another app may own the clipboard: ask the system first, then fall back to ours.
         let ours = self.clipboard.clone();
+        // Phone paths live only in our clipboard; the system one cannot carry them.
+        let ours_remote = ours
+            .as_ref()
+            .is_some_and(|(p, _)| p.iter().any(|p| link::is_remote(p)));
         std::thread::spawn(move || {
-            let system = findex_platform::get_clipboard_files().map(|(uris, cut)| {
-                (
-                    uris.iter()
-                        .map(|u| crate::parse_location(u))
-                        .collect::<Vec<_>>(),
-                    cut,
-                )
-            });
+            let system = (!ours_remote)
+                .then(findex_platform::get_clipboard_files)
+                .flatten()
+                .map(|(uris, cut)| {
+                    (
+                        uris.iter()
+                            .map(|u| crate::parse_location(u))
+                            .collect::<Vec<_>>(),
+                        cut,
+                    )
+                });
             post(move |app| {
                 let Some((paths, cut)) = system.or(ours) else {
                     return;
@@ -1766,6 +1851,9 @@ impl App {
                 if cut {
                     app.clipboard = None;
                     app.ui.set_can_paste(false);
+                }
+                if link::is_remote(&dest) || paths.iter().any(|p| link::is_remote(p)) {
+                    return app.link_paste(paths, dest, cut);
                 }
                 let kind = if cut { JobKind::Move } else { JobKind::Copy };
                 app.submit(kind, paths, Some(dest));
@@ -1777,6 +1865,9 @@ impl App {
         let paths = self.tab().model.selected_paths();
         if paths.is_empty() {
             return;
+        }
+        if self.tab().path.as_deref().is_some_and(link::is_remote) {
+            return self.link_delete(paths);
         }
         if permanent && ask {
             // The dialog calls `delete-confirmed`, which comes back here with ask = false.
@@ -2136,6 +2227,9 @@ impl App {
         if self.tab().search.is_some() {
             return;
         }
+        if link::is_remote(&dir) {
+            return self.link_create(dir, folder);
+        }
         self.tab_mut().rename_after = true;
         self.fs_task(move || {
             let (stem, ext) = if folder {
@@ -2192,6 +2286,9 @@ impl App {
         let to = from.with_file_name(&name);
         if to == from {
             return;
+        }
+        if link::is_remote(&from) {
+            return self.link_rename(from, name);
         }
         self.undo = Some(Undo::Rename {
             from: from.clone(),
@@ -2607,6 +2704,7 @@ fn tab_title(t: &Tab, full_path: bool) -> String {
     match (&t.path, &t.search) {
         (_, Some(q)) => format!("Search: {q}"),
         (None, _) => "This PC".into(),
+        (Some(p), _) if p.as_path() == Path::new(link::PHONES) => "Phones".into(),
         (Some(p), _) if full_path => p.display().to_string(),
         (Some(p), _) if Some(p) == dirs::home_dir().as_ref() => "Home".into(),
         (Some(p), _) => p
@@ -2625,6 +2723,22 @@ fn crumbs(path: Option<&Path>) -> Vec<Crumb> {
             path: SharedString::new(),
         }];
     };
+    if link::is_remote(path) {
+        let mut acc = PathBuf::new();
+        for c in path.components() {
+            acc.push(c);
+            let label = c.as_os_str().to_string_lossy().into_owned();
+            v.push(Crumb {
+                label: if label == link::PHONES {
+                    "Phones".into()
+                } else {
+                    label.into()
+                },
+                path: acc.display().to_string().into(),
+            });
+        }
+        return v;
+    }
     let home = dirs::home_dir();
     let (mut acc, rest) = match home
         .as_deref()

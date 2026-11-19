@@ -18,6 +18,7 @@ findex-ops = { path = "crates/findex-ops" }
 findex-scan = { path = "crates/findex-scan" }
 findex-thumbs = { path = "crates/findex-thumbs" }
 findex-ui = { path = "crates/findex-ui" }
+findex-link = { path = "crates/findex-link" }
 
 slint = { version = "1.19", default-features = false }
 slint-build = "1.19"

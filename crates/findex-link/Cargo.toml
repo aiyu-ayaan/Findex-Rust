@@ -1,0 +1,18 @@
+[package]
+name = "findex-link"
+description = "Findex Link: pairing, discovery and a pinned-TLS file API between Findex on desktop and Android."
+version.workspace = true
+license.workspace = true
+edition.workspace = true
+
+[dependencies]
+rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12", "logging"] }
+rcgen = { version = "0.14", default-features = false, features = ["crypto", "ring"] }
+ring = "0.17"
+mdns-sd = "0.13"
+serde_json.workspace = true
+dirs.workspace = true
+trash.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true

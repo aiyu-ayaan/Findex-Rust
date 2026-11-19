@@ -10,7 +10,7 @@ mod ipc;
 
 pub use clipboard::{get_clipboard_files, path_to_uri, set_clipboard_files};
 pub use default_handler::{is_default_file_manager, set_default_file_manager};
-pub use drives::{drives, eject, mount};
+pub use drives::{drives, eject, mount, volume_space};
 pub use fs::{copy_file, copy_symlink, device_id, list_dir};
 pub use ipc::{forward as forward_to_running, listen as listen_for_instances};
 

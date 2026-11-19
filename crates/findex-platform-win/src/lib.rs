@@ -46,6 +46,18 @@ fn filetime_to_unix(lo: u32, hi: u32) -> i64 {
     }
 }
 
+/// (total, free) bytes of the volume holding `path`, or zeros when the probe fails or times out.
+pub fn volume_space(path: &Path) -> (u64, u64) {
+    let w = wide(path.as_os_str());
+    with_timeout(PROBE_TIMEOUT, move || {
+        let (mut free, mut total) = (0u64, 0u64);
+        let ok =
+            unsafe { GetDiskFreeSpaceExW(w.as_ptr(), &mut free, &mut total, std::ptr::null_mut()) };
+        if ok != 0 { (total, free) } else { (0, 0) }
+    })
+    .unwrap_or((0, 0))
+}
+
 /// Runs `f` on its own thread and gives up after `timeout`. A hung share only leaks that thread.
 pub fn with_timeout<T: Send + 'static>(
     timeout: Duration,

@@ -212,7 +212,7 @@ component DriveTile inherits Rectangle {
         padding: 10px;
         spacing: 12px;
         Image {
-            source: drive.kind == 1 ? Icons.usb : drive.kind == 2 ? Icons.network : Icons.drive;
+            source: drive.kind == 1 ? Icons.usb : drive.kind == 2 ? Icons.network : drive.kind == 5 ? Icons.phone : Icons.drive;
             width: 40px;
             height: 40px;
             y: (parent.height - 40px) / 2;
@@ -248,7 +248,9 @@ component DriveTile inherits Rectangle {
 export component ThisPcPage inherits Rectangle {
     in property <[DriveData]> drives;
     in property <[DriveData]> network;
+    in property <[DriveData]> phones;
     callback open-drive(bool, int);
+    callback open-phone(int);
     callback eject-drive(int);
     callback drive-menu(bool, int, length, length);
     property <int> cols: max(1, floor((self.width - 32px) / 320px));
@@ -281,6 +283,17 @@ export component ThisPcPage inherits Rectangle {
                     drive: d;
                     clicked => { root.open-drive(true, i); }
                     menu(x, y) => { root.drive-menu(true, i, x, y); }
+                }
+            }
+            if phones.length > 0: Text { text: "Phones (" + phones.length + ")"; color: Theme.text-primary; font-weight: 600; }
+            if phones.length > 0: Rectangle {
+                height: ceil(phones.length / cols) * 80px;
+                for d[i] in phones: DriveTile {
+                    x: mod(i, cols) * tile-w;
+                    y: floor(i / cols) * 80px;
+                    width: tile-w - 8px;
+                    drive: d;
+                    clicked => { root.open-phone(i); }
                 }
             }
         }
