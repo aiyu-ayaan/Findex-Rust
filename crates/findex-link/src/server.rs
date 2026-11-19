@@ -429,7 +429,10 @@ fn list(r: &mut BufReader<Tls>, s: &Shared, vpath: &str) -> ApiResult {
         s.cfg
             .roots
             .iter()
-            .map(|(name, _)| json!({"name": name, "dir": true, "size": 0, "mtime": 0}))
+            .map(|(name, path)| {
+                let mtime = fs::metadata(path).map_or(0, |m| mtime_ms(&m));
+                json!({"name": name, "dir": true, "size": 0, "mtime": mtime})
+            })
             .collect()
     } else {
         let dir = resolve(s, vpath)?;
