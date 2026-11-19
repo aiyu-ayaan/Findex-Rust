@@ -1,3 +1,19 @@
+## v0.0.1-alpha.2 (2026-11-19)
+
+- !alpha release(link) : Ship pairing a phone by QR code
+- fix(link): give the QR panel keyboard focus after the menu closes, so Escape works
+- feat(link): pair a phone by QR code, and add a dev flavour that leaves the installed Findex alone
+- fix(link): confirm before unpairing a phone and name the phone switch when it is unreachable
+- docs(link): use the phone's own volume names for Link roots
+- fix(link): give storage roots their real modified time
+- fix(link): put Pair a phone below Options so the more menu keeps its order
+- docs(link): describe the Findex ecosystem and link the Android app
+- test(link): add linkctl, a headless endpoint for testing against a phone
+- feat(link): pair with Findex on Android and browse phones from the PC
+- docs: point install command, badges and metadata at Findex-Rust
+- ci: install libxkbcommon-x11 so the UI suites can start under Xvfb
+- feat(install): pick stable, else beta, else alpha when no channel is given
+
 ## v0.0.1-alpha.1 (2026-11-17)
 
 - !alpha fix(release): find the version line wherever it sits in [workspace.package]
