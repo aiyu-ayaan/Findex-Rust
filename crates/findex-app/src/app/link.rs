@@ -769,7 +769,10 @@ impl App {
             .into(),
         );
         self.ui.set_qr_visible(true);
-        self.ui.invoke_focus_qr();
+        // After the ⋯ flyout has closed and handed focus back, or the panel would not get Escape.
+        Timer::single_shot(Duration::from_millis(50), || {
+            with_app(|app| app.ui.invoke_focus_qr())
+        });
         self.link.qr_timer.start(TimerMode::SingleShot, QR_TTL, || {
             with_app(|app| app.qr_close())
         });
