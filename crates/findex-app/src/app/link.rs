@@ -33,6 +33,8 @@ pub struct LinkState {
     answer: Option<(i32, mpsc::Sender<bool>)>,
     /// This PC phone tiles in display order: (phone name, root name).
     tiles: Vec<(String, String)>,
+    /// Phones waiting for the Unpair confirmation (dialog 9).
+    unpairing: Vec<String>,
 }
 
 pub fn phones_root() -> PathBuf {
@@ -68,7 +70,7 @@ fn friendly(phone: &str, e: &io::Error) -> String {
         | io::ErrorKind::HostUnreachable
         | io::ErrorKind::NetworkUnreachable
         | io::ErrorKind::WouldBlock => format!(
-            "Couldn't reach {phone}. Open Findex on the phone and check it is on the same network."
+            "Couldn't reach {phone}. In Findex on the phone, open Computers and turn on Let computers connect, on the same network."
         ),
         _ => format!("{phone}: {e}"),
     }
@@ -572,7 +574,19 @@ impl App {
     pub(super) fn link_delete(&mut self, paths: Vec<PathBuf>) {
         if self.tab().path.as_deref() == Some(Path::new(PHONES)) {
             let names: Vec<String> = paths.iter().filter_map(|p| split(p)?.0).collect();
-            return self.unpair(names);
+            if names.is_empty() {
+                return;
+            }
+            self.ui.set_link_text(
+                format!(
+                    "Unpair {}? It can no longer browse this PC, and this PC can no longer open it. Pair again to reconnect.",
+                    names.join(", ")
+                )
+                .into(),
+            );
+            self.link.unpairing = names;
+            self.ui.invoke_show_link_dialog(9, SharedString::new());
+            return;
         }
         let mut work = Vec::new();
         for p in &paths {
@@ -592,6 +606,11 @@ impl App {
                 app.load();
             });
         });
+    }
+
+    pub(super) fn unpair_confirmed(&mut self) {
+        let names = std::mem::take(&mut self.link.unpairing);
+        self.unpair(names);
     }
 
     fn unpair(&mut self, names: Vec<String>) {

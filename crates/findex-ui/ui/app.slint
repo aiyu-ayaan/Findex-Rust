@@ -142,6 +142,7 @@ export component AppWindow inherits Window {
     callback link-answer(bool);
     callback send-to-phone();
     callback send-to-phone-named(string);
+    callback unpair-confirmed();
 
     // ---- functions Rust calls ----
     public function show-rename(name: string) {
@@ -168,7 +169,7 @@ export component AppWindow inherits Window {
         if dialog-kind == 4 { dialog-kind = 0; list-scope.focus(); }
     }
     public function focus-list() { list-scope.focus(); }
-    /// Findex Link dialogs: 5 pair (address), 6 confirm code, 7 incoming pairing, 8 choose a phone.
+    /// Findex Link dialogs: 5 pair (address), 6 confirm code, 7 incoming pairing, 8 choose a phone, 9 unpair.
     public function show-link-dialog(kind: int, input: string) {
         dialog-kind = kind;
         dialog-input = input;
@@ -552,14 +553,14 @@ export component AppWindow inherits Window {
     dialog := Dialog {
         visible: root.dialog-kind != 0;
         title: root.dialog-kind == 1 ? "Rename" : root.dialog-kind == 3 ? "Rename drive" : root.dialog-kind == 4 ? "Findex " + root.update-version + " is available"
-            : root.dialog-kind == 5 ? "Pair a phone" : root.dialog-kind == 6 ? "Check the code" : root.dialog-kind == 7 ? "Pairing request" : root.dialog-kind == 8 ? "Send to phone" : "Delete permanently?";
+            : root.dialog-kind == 5 ? "Pair a phone" : root.dialog-kind == 6 ? "Check the code" : root.dialog-kind == 7 ? "Pairing request" : root.dialog-kind == 8 ? "Send to phone" : root.dialog-kind == 9 ? "Unpair phone" : "Delete permanently?";
         message: root.dialog-kind == 4 ? "You have " + root.update-installed + ". " + (root.update-self-install ? "Findex restarts when the download is done." : "The installer is saved to Downloads and opened.") : root.dialog-kind == 3 ? "Leave the name empty to restore the original one." : root.dialog-kind == 2 ? (root.delete-count == 1 ? "This item will be deleted and cannot be restored from the Trash." : root.delete-count + " items will be deleted and cannot be restored from the Trash.")
             : root.dialog-kind >= 5 ? root.link-text : "";
         primary-text: root.dialog-kind == 1 || root.dialog-kind == 3 ? "Rename" : root.dialog-kind == 4 ? (root.update-self-install ? "Download and restart" : "Download")
-            : root.dialog-kind == 5 || root.dialog-kind == 6 || root.dialog-kind == 7 ? "Pair" : root.dialog-kind == 8 ? "Send" : "Delete";
+            : root.dialog-kind == 5 || root.dialog-kind == 6 || root.dialog-kind == 7 ? "Pair" : root.dialog-kind == 8 ? "Send" : root.dialog-kind == 9 ? "Unpair" : "Delete";
         cancel-text: root.dialog-kind == 4 ? "Later" : root.dialog-kind == 7 ? "Decline" : "Cancel";
         progress: root.dialog-kind == 4 ? root.update-progress : -1;
-        danger: root.dialog-kind == 2;
+        danger: root.dialog-kind == 2 || root.dialog-kind == 9;
         has-input: root.dialog-kind == 1 || root.dialog-kind == 3 || root.dialog-kind == 5 || root.dialog-kind == 8;
         input-label: root.dialog-kind == 3 ? "Drive name" : root.dialog-kind == 5 ? "Phone address (IP or IP:port)" : root.dialog-kind == 8 ? "Phone name" : "New name";
         input-text <=> root.dialog-input;
@@ -571,6 +572,7 @@ export component AppWindow inherits Window {
             if root.dialog-kind == 5 { root.pair-submit(root.dialog-input); }
             if root.dialog-kind == 6 || root.dialog-kind == 7 { root.link-answer(true); }
             if root.dialog-kind == 8 { root.send-to-phone-named(root.dialog-input); }
+            if root.dialog-kind == 9 { root.unpair-confirmed(); }
             root.dialog-kind = 0;
             list-scope.focus();
         }
