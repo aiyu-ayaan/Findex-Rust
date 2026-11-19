@@ -489,9 +489,9 @@ export component AppWindow inherits Window {
                 MenuRow { icon: Icons.copy; text: "Copy as path"; shortcut: "Ctrl+Shift+C"; enabled: root.selected-count > 0; clicked => { root.copy-path(); } }
                 MenuRow { icon: Icons.undo; text: "Undo"; shortcut: "Ctrl+Z"; enabled: root.toast-undo; clicked => { root.undo(); } }
                 MenuRow { icon: Icons.transfer; text: "Transfers"; clicked => { root.show-transfers(); } }
-                MenuRow { icon: Icons.phone; text: "Pair a phone"; clicked => { root.pair-phone(); } }
                 HDivider { }
                 MenuRow { icon: Icons.settings; text: "Options"; clicked => { root.show-options(); } }
+                MenuRow { icon: Icons.phone; text: "Pair a phone"; clicked => { root.pair-phone(); } }
             }
         }
     }
