@@ -62,6 +62,9 @@ pub struct Config {
     pub events: Box<dyn Fn(Event) + Send + Sync>,
     /// Blocks until the user accepts (true) or declines; the caller should time out after about a minute.
     pub approve: Box<dyn Fn(PairPrompt) -> bool + Send + Sync>,
+    /// The one-time secret of the QR code on screen, if one is shown. A pairing that presents it is
+    /// accepted without a prompt (the phone proved it saw the screen) and the secret is used up.
+    pub qr_secret: Arc<Mutex<Option<String>>>,
 }
 
 struct Pending {
@@ -72,6 +75,7 @@ struct Pending {
     commit: Vec<u8>,
     nonce: [u8; 32],
     at: Instant,
+    secret: Option<String>,
 }
 
 struct Shared {
@@ -89,8 +93,13 @@ pub struct Server {
 impl Server {
     /// Binds `DEFAULT_PORT` (or any free port when it is taken) on all interfaces and serves on worker threads.
     pub fn start(cfg: Config) -> io::Result<Server> {
-        let listener = TcpListener::bind(("0.0.0.0", DEFAULT_PORT))
-            .or_else(|_| TcpListener::bind(("0.0.0.0", 0)))?;
+        Server::start_preferring(cfg, DEFAULT_PORT)
+    }
+
+    /// Like [Server::start] with another preferred port.
+    pub fn start_preferring(cfg: Config, port: u16) -> io::Result<Server> {
+        let listener =
+            TcpListener::bind(("0.0.0.0", port)).or_else(|_| TcpListener::bind(("0.0.0.0", 0)))?;
         Server::start_on(cfg, listener)
     }
 
@@ -339,6 +348,7 @@ fn pair_start(head: &Head, r: &mut BufReader<Tls>, s: &Shared) -> ApiResult {
             commit,
             nonce,
             at: Instant::now(),
+            secret: field("secret"),
         },
     );
     drop(pending);
@@ -370,12 +380,22 @@ fn pair_finish(head: &Head, r: &mut BufReader<Tls>, remote: &str, s: &Shared) ->
     }
     let client_fp = sas::unhex(&p.client_id).ok_or(ApiError(400, "id"))?;
     let code = sas::code(&s.cfg.identity.fingerprint, &client_fp, &nonce, &p.nonce);
-    let _one = s.pairing.lock().unwrap();
-    let accepted = (s.cfg.approve)(PairPrompt {
-        name: p.name.clone(),
-        platform: p.platform.clone(),
-        code,
+    // A matching QR secret is the user's consent; it works once.
+    let by_qr = p.secret.as_deref().is_some_and(|given| {
+        let mut current = s.cfg.qr_secret.lock().unwrap();
+        let ok = current.as_deref().is_some_and(|c| sas::same(c, given));
+        if ok {
+            *current = None;
+        }
+        ok
     });
+    let _one = s.pairing.lock().unwrap();
+    let accepted = by_qr
+        || (s.cfg.approve)(PairPrompt {
+            name: p.name.clone(),
+            platform: p.platform.clone(),
+            code,
+        });
     if !accepted {
         return Err(ApiError(403, "declined"));
     }

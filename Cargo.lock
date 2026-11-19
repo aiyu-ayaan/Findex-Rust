@@ -1311,6 +1311,7 @@ dependencies = [
  "findex-thumbs",
  "findex-ui",
  "image",
+ "qrcode",
  "raw-window-handle",
  "serde_json",
  "slint",
@@ -1330,6 +1331,7 @@ name = "findex-link"
 version = "0.0.1-alpha.1"
 dependencies = [
  "dirs",
+ "if-addrs",
  "mdns-sd",
  "rcgen",
  "ring",
@@ -3800,6 +3802,12 @@ name = "pxfm"
 version = "0.1.30"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d55d956fa96f5ec02be2e13af0e20391a5aa83d6a074e3ad368959d0fab299ea"
+
+[[package]]
+name = "qrcode"
+version = "0.14.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d68782463e408eb1e668cf6152704bd856c78c5b6417adaee3203d8f4c1fc9ec"
 
 [[package]]
 name = "quick-error"

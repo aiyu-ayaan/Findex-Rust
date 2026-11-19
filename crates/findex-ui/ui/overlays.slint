@@ -74,6 +74,63 @@ export component Dialog inherits Rectangle {
     }
 }
 
+/// Findex Link: the QR code a phone scans to pair. The image carries its own white quiet zone,
+/// so it scans in the dark theme too. Escape closes.
+export component QrPanel inherits Rectangle {
+    in property <image> code;
+    in property <string> caption;
+    callback close();
+    callback by-address();
+    background: Theme.smoke;
+
+    public function open-focus() { close-btn.focus(); }
+
+    TouchArea { }
+    FocusScope {
+        key-pressed(e) => {
+            if e.text == Key.Escape { root.close(); return accept; }
+            reject
+        }
+        Rectangle {
+            width: min(420px, root.width - 48px);
+            height: body.preferred-height;
+            background: Theme.dialog;
+            border-radius: Theme.radius-overlay;
+            border-width: 1px;
+            border-color: Theme.stroke-strong;
+            drop-shadow-blur: 32px;
+            drop-shadow-offset-y: 8px;
+            drop-shadow-color: #00000059;
+            accessible-role: groupbox;
+            accessible-label: "Pair a phone";
+            body := VerticalLayout {
+                padding: 24px;
+                spacing: 12px;
+                Text { text: "Pair a phone"; color: Theme.text-primary; font-size: Theme.font-subtitle; font-weight: 600; }
+                Text { text: "On your phone, open Findex, go to Computers and tap Scan QR code."; color: Theme.text-primary; wrap: word-wrap; }
+                HorizontalLayout {
+                    alignment: center;
+                    Image {
+                        source: root.code;
+                        width: 240px;
+                        height: 240px;
+                        image-rendering: pixelated;
+                        accessible-role: image;
+                        accessible-label: "Pairing QR code";
+                    }
+                }
+                Text { text: root.caption; color: Theme.text-secondary; font-size: Theme.font-caption; wrap: word-wrap; }
+                HorizontalLayout {
+                    spacing: 8px;
+                    alignment: end;
+                    DialogButton { text: "Pair by address"; clicked => { root.by-address(); } }
+                    close-btn := DialogButton { text: "Close"; primary: true; clicked => { root.close(); } }
+                }
+            }
+        }
+    }
+}
+
 /// Toast: bottom centre, polite, never takes focus.
 export component Toast inherits Rectangle {
     in property <string> text;

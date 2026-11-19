@@ -9,6 +9,7 @@ use findex_link::server::{Config, Event, Server};
 use findex_link::{Client, Identity, Store};
 
 struct Side {
+    qr: Arc<Mutex<Option<String>>>,
     identity: Arc<Identity>,
     store: Arc<Store>,
     _dirs: tempfile::TempDir,
@@ -28,6 +29,7 @@ fn side(accept: bool, codes: Arc<Mutex<Vec<String>>>) -> Side {
     fs::create_dir_all(&inbox).unwrap();
     let events: Arc<Mutex<Vec<Event>>> = Arc::default();
     let ev = events.clone();
+    let qr: Arc<Mutex<Option<String>>> = Arc::default();
     let server = Server::start_on(
         Config {
             identity: identity.clone(),
@@ -46,11 +48,13 @@ fn side(accept: bool, codes: Arc<Mutex<Vec<String>>>) -> Side {
                 codes.lock().unwrap().push(p.code);
                 accept
             }),
+            qr_secret: qr.clone(),
         },
         TcpListener::bind("127.0.0.1:0").unwrap(),
     )
     .unwrap();
     Side {
+        qr,
         identity,
         store,
         _dirs: dirs,
@@ -220,4 +224,56 @@ fn declined_pairing_stores_nothing() {
     let err = pair_with(&desk, &phone).unwrap_err();
     assert_eq!(err.kind(), std::io::ErrorKind::PermissionDenied);
     assert!(desk.store.all().is_empty());
+}
+
+#[test]
+fn qr_pairing_needs_no_prompt_and_works_once() {
+    let codes: Arc<Mutex<Vec<String>>> = Arc::default();
+    // The prompt declines: only the QR secret can get a phone paired.
+    let desk = side(false, codes.clone());
+    let secret = findex_link::sas::token()[..32].to_string();
+    *desk.qr.lock().unwrap() = Some(secret.clone());
+    let uri = findex_link::qr::PairUri {
+        id: desk.identity.id(),
+        hosts: vec!["127.0.0.2".into(), "127.0.0.1".into()],
+        port: desk.server.port,
+        secret: secret.clone(),
+        name: "Desk".into(),
+    };
+    let uri = findex_link::qr::PairUri::parse(&uri.to_uri()).unwrap();
+    let dir = tempfile::tempdir().unwrap();
+    let phone = Identity::load_or_create(dir.path()).unwrap();
+    let me = Me {
+        identity: &phone,
+        name: "Phone",
+        platform: "android",
+        port: 1,
+    };
+    let peer = findex_link::client::pair_qr(&uri, &me).unwrap();
+    assert!(
+        codes.lock().unwrap().is_empty(),
+        "no prompt for a QR pairing"
+    );
+    assert!(Client::for_peer(&peer).info().is_ok());
+    assert!(desk.qr.lock().unwrap().is_none(), "secret used up");
+
+    // The same code again: the secret is gone, so it falls back to the prompt, which declines.
+    let dir2 = tempfile::tempdir().unwrap();
+    let phone2 = Identity::load_or_create(dir2.path()).unwrap();
+    let me2 = Me {
+        identity: &phone2,
+        ..me
+    };
+    assert!(findex_link::client::pair_qr(&uri, &me2).is_err());
+    assert_eq!(codes.lock().unwrap().len(), 1);
+
+    // A QR code naming another certificate is refused before anything is sent.
+    let mut wrong = uri.clone();
+    wrong.id = "00".repeat(32);
+    *desk.qr.lock().unwrap() = Some(secret);
+    assert!(findex_link::client::pair_qr(&wrong, &me2).is_err());
+    assert!(
+        desk.qr.lock().unwrap().is_some(),
+        "a refused attempt does not use up the secret"
+    );
 }

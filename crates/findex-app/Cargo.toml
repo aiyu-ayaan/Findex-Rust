@@ -9,6 +9,10 @@ edition.workspace = true
 name = "findex"
 path = "src/main.rs"
 
+[features]
+# Release build of the dev flavour (separate config, socket and port; see findex_core::flavor).
+dev = ["findex-core/dev"]
+
 [dependencies]
 findex-core.workspace = true
 findex-platform.workspace = true
@@ -17,6 +21,7 @@ findex-scan.workspace = true
 findex-thumbs.workspace = true
 findex-ui.workspace = true
 findex-link.workspace = true
+qrcode = { version = "0.14", default-features = false }
 
 slint = { workspace = true, features = ["std", "raw-window-handle-06", "unstable-winit-030"] }
 raw-window-handle.workspace = true

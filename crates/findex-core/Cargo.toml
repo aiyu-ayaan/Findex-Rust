@@ -8,3 +8,7 @@ edition.workspace = true
 [dependencies]
 nucleo-matcher.workspace = true
 chrono.workspace = true
+
+[features]
+# Dev flavour in release builds too (debug builds are always dev): see `findex_core::flavor`.
+dev = []

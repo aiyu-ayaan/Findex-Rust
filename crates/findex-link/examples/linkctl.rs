@@ -3,8 +3,10 @@
 //! State (identity, peers.json) lives in `$LINKCTL_DIR` (default `./linkctl-state`).
 //!
 //! ```text
-//! linkctl serve DIR [PORT]     serve DIR as "Home" (auto-accepts pairing, prints the code and events)
+//! linkctl serve DIR [PORT]     serve DIR as "Home" (auto-accepts pairing, prints the code and events;
+//!                              LINKCTL_QR=1 also prints a one-time QR pairing URI)
 //! linkctl pair HOST [PORT]     pair with a server (auto-confirms, prints the code)
+//! linkctl pair-uri URI         pair from a scanned `findex://pair?...` QR text (no prompt on the PC)
 //! linkctl info | ls PATH | stat PATH
 //! linkctl get PATH OUT [OFFSET] | put LOCAL PATH | send LOCAL | text TEXT
 //! linkctl mkdir PATH | rm PATH | mv PATH TO | unpair
@@ -52,6 +54,8 @@ fn run() -> std::io::Result<()> {
                 .and_then(|p| p.parse().ok())
                 .unwrap_or(DEFAULT_PORT);
             let inbox = dir.join("inbox");
+            // With LINKCTL_QR=1 the server also accepts one QR pairing (printed below), like the app's QR panel.
+            let qr: Arc<std::sync::Mutex<Option<String>>> = Arc::default();
             std::fs::create_dir_all(&inbox)?;
             let server = Server::start_on(
                 Config {
@@ -71,13 +75,39 @@ fn run() -> std::io::Result<()> {
                         );
                         true
                     }),
+                    qr_secret: qr.clone(),
                 },
                 TcpListener::bind(("0.0.0.0", port))?,
             )?;
             println!("serving on port {} as {}", server.port, identity.id());
+            if std::env::var_os("LINKCTL_QR").is_some() {
+                let secret = findex_link::sas::token()[..32].to_string();
+                *qr.lock().unwrap() = Some(secret.clone());
+                let uri = findex_link::qr::PairUri {
+                    id: identity.id(),
+                    hosts: findex_link::qr::lan_addresses(),
+                    port: server.port,
+                    secret,
+                    name: "linkctl".into(),
+                };
+                println!("qr: {}", uri.to_uri());
+            }
             loop {
                 std::thread::park();
             }
+        }
+        "pair-uri" => {
+            let uri = findex_link::qr::PairUri::parse(&arg(1)?)
+                .ok_or_else(|| std::io::Error::other("not a findex://pair code"))?;
+            let me = Me {
+                identity: &identity,
+                name: "linkctl",
+                platform: "linux",
+                port: DEFAULT_PORT,
+            };
+            let p = findex_link::client::pair_qr(&uri, &me)?;
+            store.upsert(p.clone())?;
+            println!("paired with {} ({})", p.name, p.id);
         }
         "pair" => {
             let port = args

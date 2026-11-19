@@ -16,9 +16,10 @@ pub struct Identity {
 }
 
 impl Identity {
-    /// The default folder: `$XDG_CONFIG_HOME/findex/link` or `%APPDATA%\findex\link`.
-    pub fn default_dir() -> Option<PathBuf> {
-        dirs::config_dir().map(|d| d.join("findex").join("link"))
+    /// The default folder: `$XDG_CONFIG_HOME/<app>/link` or `%APPDATA%\<app>\link`, where `app` is
+    /// the flavour's folder (`findex` or `findex-dev`).
+    pub fn default_dir(app: &str) -> Option<PathBuf> {
+        dirs::config_dir().map(|d| d.join(app).join("link"))
     }
 
     pub fn load_or_create(dir: &Path) -> io::Result<Identity> {

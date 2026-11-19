@@ -396,17 +396,54 @@ pub fn pair(
     me: &Me,
     confirm: &mut dyn FnMut(&str, &str) -> bool,
 ) -> io::Result<Peer> {
+    pair_inner(host, port, me, None, None, confirm)
+}
+
+/// Pairs from a scanned QR code: the certificate is pinned from the code and its secret lets the PC
+/// accept without a prompt. Tries each address in turn.
+pub fn pair_qr(uri: &crate::qr::PairUri, me: &Me) -> io::Result<Peer> {
+    let pin: [u8; 32] = sas::unhex(&uri.id)
+        .and_then(|b| b.try_into().ok())
+        .ok_or_else(|| io_err("bad id"))?;
+    let mut last = io_err("no address");
+    for host in &uri.hosts {
+        match pair_inner(
+            host,
+            uri.port,
+            me,
+            Some(pin),
+            Some(&uri.secret),
+            &mut |_, _| true,
+        ) {
+            Ok(p) => return Ok(p),
+            Err(e) => last = e,
+        }
+    }
+    Err(last)
+}
+
+fn pair_inner(
+    host: &str,
+    port: u16,
+    me: &Me,
+    pin: Option<[u8; 32]>,
+    secret: Option<&str>,
+    confirm: &mut dyn FnMut(&str, &str) -> bool,
+) -> io::Result<Peer> {
     let mut client = Client {
         host: host.to_string(),
         port,
-        pin: None,
+        pin,
         token: None,
         timeout: Duration::from_secs(30),
     };
     let nonce_c = sas::random32();
-    let start = json!({"id": me.identity.id(), "name": me.name, "platform": me.platform,
-                       "port": me.port, "commit": sas::hex(&sas::sha256(&nonce_c))})
-    .to_string();
+    let mut start = json!({"id": me.identity.id(), "name": me.name, "platform": me.platform,
+                       "port": me.port, "commit": sas::hex(&sas::sha256(&nonce_c))});
+    if let Some(s) = secret {
+        start["secret"] = json!(s);
+    }
+    let start = start.to_string();
     let (resp, seen) = client.send("POST", "/v1/pair/start", &[], Body::Bytes(start.as_bytes()))?;
     let v = resp.json()?;
     let s = |k: &str| v.get(k).and_then(Value::as_str).unwrap_or("").to_string();

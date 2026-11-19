@@ -103,7 +103,7 @@ All screenshots come from the end-to-end UI test runs (`tests/ui`).
 | Copy both ways | Copy, paste or **Send to phone** | Copy, paste or **Send to computer** (lands in `Downloads/Findex` here) |
 | Streaming | Phone files open on the PC | Videos and music on this PC stream to the phone with seeking |
 
-**Pair a phone.** Install Findex on the phone. On the phone, open **Home > Computers** and tap this PC under **Nearby**, or use **Pair by address**. Here you can also choose **See more (⋯) > Pair a phone**. Check that both screens show the same 6-digit code, then accept on both.
+**Pair a phone.** Install Findex on the phone. Here, choose **See more (⋯) > Pair a phone** and scan the QR code with **Home > Computers > Scan QR code** on the phone. That's all: the QR code carries this PC's identity, so nothing needs comparing. Without a camera, tap this PC under **Nearby** on the phone, or use **Pair by address**. Then check that both screens show the same 6-digit code and accept on both.
 
 The design is modelled on Apple's AirDrop and Continuity: a long-term identity certificate per device, mDNS discovery (`_findex._tcp`), TLS with certificate pinning, numeric-comparison pairing with hash commitments, and a bearer token per pairing. The protocol and the comparison with Apple are in [`development/docs/10-ecosystem.md`](development/docs/10-ecosystem.md). Paired phones can reach only your Home folder and the `Downloads/Findex` inbox, and only while Findex is running.
 
@@ -145,6 +145,14 @@ Design docs are in [`development/docs`](development/docs): architecture, feature
 ---
 
 ## 🚀 Build
+
+**Dev flavour.** Every debug build (`cargo run`), or a release build with `--features dev`, is the *dev flavour*. It runs next to an installed Findex without touching it:
+- It keeps its own settings, paired phones and Link identity in `findex-dev` instead of `findex` under the config dir.
+- It uses its own single-instance socket, so it never hands its window to the installed app.
+- It doesn't claim `org.freedesktop.FileManager1` and refuses `--set-default`.
+- It prefers Link port 47101, and shows "Findex Dev" in the title and "(dev)" to phones.
+
+Release builds without the feature are the normal flavour.
 
 ```bash
 # Linux needs: libfontconfig1-dev libxkbcommon-dev libwayland-dev libx11-dev libgl1-mesa-dev

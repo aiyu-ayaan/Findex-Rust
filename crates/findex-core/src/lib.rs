@@ -2,6 +2,7 @@
 //! No UI and no OS calls, so it is testable and benchmarkable headless.
 
 pub mod entry;
+pub mod flavor;
 pub mod format;
 pub mod fuzzy;
 pub mod history;

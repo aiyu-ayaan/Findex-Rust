@@ -89,7 +89,11 @@ impl Default for Settings {
 }
 
 fn file() -> Option<PathBuf> {
-    Some(dirs::config_dir()?.join("findex/settings.ini"))
+    Some(
+        dirs::config_dir()?
+            .join(findex_core::flavor::APP_DIR)
+            .join("settings.ini"),
+    )
 }
 
 /// Every boolean setting, so parsing and writing share one list.

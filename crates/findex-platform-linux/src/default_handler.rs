@@ -85,6 +85,12 @@ pub fn is_default_file_manager() -> bool {
 /// Installs the `.desktop` entry and makes Findex the folder handler, or reverts to the saved previous handler.
 /// Reversible: the previous handler is saved before anything changes.
 pub fn set_default_file_manager(enable: bool) -> io::Result<String> {
+    if findex_core::flavor::DEV {
+        return Err(io::Error::new(
+            io::ErrorKind::Unsupported,
+            "This is a dev build. Make the installed Findex the default file manager instead.",
+        ));
+    }
     let backup = backup_file();
     if enable {
         // Inside an AppImage the binary runs from a temporary mount; $APPIMAGE is the real file.

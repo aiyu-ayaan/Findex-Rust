@@ -8,7 +8,7 @@ import { FileRow, TabData, Crumb, NavItem, DriveData, JobData, Details } from "t
 import { TabStrip, CommandBar, AddressBar } from "chrome.slint";
 import { DetailsView, GridView } from "fileviews.slint";
 import { NavPane, StatusBar, DetailsPane, ThisPcPage } from "panes.slint";
-import { Dialog, Toast } from "overlays.slint";
+import { Dialog, Toast, QrPanel } from "overlays.slint";
 import { TransferWindow } from "transfer.slint";
 import { OptionsWindow, Options } from "options.slint";
 import { PropertiesWindow, PropsData } from "properties.slint";
@@ -22,7 +22,8 @@ component CheckRow inherits MenuRow {
 }
 
 export component AppWindow inherits Window {
-    title: "Findex";
+    in property <string> app-title: "Findex";
+    title: app-title;
     icon: Icons.app-icon;
     no-frame: true;
     resize-border-width: Theme.maximized ? 0px : 6px;
@@ -65,6 +66,9 @@ export component AppWindow inherits Window {
     in property <bool> in-phone;
     in property <int> phone-count;
     in property <string> link-text;
+    in property <bool> qr-visible;
+    in property <image> qr-image;
+    in property <string> qr-caption;
     in property <[JobData]> jobs;
     in property <int> active-jobs;
     in property <float> jobs-progress;
@@ -143,6 +147,8 @@ export component AppWindow inherits Window {
     callback send-to-phone();
     callback send-to-phone-named(string);
     callback unpair-confirmed();
+    callback qr-close();
+    callback pair-by-address();
 
     // ---- functions Rust calls ----
     public function show-rename(name: string) {
@@ -175,6 +181,7 @@ export component AppWindow inherits Window {
         dialog-input = input;
         dialog.open-focus();
     }
+    public function focus-qr() { qr.open-focus(); }
     public function close-link-dialog(kind: int) {
         if dialog-kind == kind { dialog-kind = 0; list-scope.focus(); }
     }
@@ -582,6 +589,14 @@ export component AppWindow inherits Window {
             root.dialog-kind = 0;
             list-scope.focus();
         }
+    }
+
+    qr := QrPanel {
+        visible: root.qr-visible;
+        code: root.qr-image;
+        caption: root.qr-caption;
+        close => { root.qr-close(); list-scope.focus(); }
+        by-address => { root.pair-by-address(); }
     }
 
     clip := TextInput { visible: false; width: 0; height: 0; }

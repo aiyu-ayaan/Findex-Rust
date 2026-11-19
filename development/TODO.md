@@ -142,6 +142,7 @@ Legend: `[ ]` open, `[x]` done. P0 = v1.0 blocker, P1 = v1.0 target, P2 = later.
 - [x] `findex-link` crate: identity (rcgen), numeric-comparison pairing, rustls server/client with pinning, mDNS, loopback tests, `linkctl` example
 - [x] Phones in the navigation pane, phone storage on This PC, phone folders in tabs (open, copy/paste both ways, rename, new folder, delete to the phone's bin)
 - [x] Send to phone, pairing dialogs, Options toggle, About link to Findex for Android
+- [x] QR pairing panel (one-time secret, pinned fingerprint), dev flavour (`findex_core::flavor`)
 - [ ] Phone thumbnails over the link (`/v1/thumb`)
 - [ ] Phone transfers in the unified transfer window (now toast progress)
 - [ ] Expose drives other than Home to paired phones

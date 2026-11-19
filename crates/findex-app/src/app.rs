@@ -167,6 +167,7 @@ pub fn start(ui: AppWindow, start: Option<PathBuf>) {
     let jobs_model = Rc::new(VecModel::default());
     ui.set_tabs(ModelRc::from(tabs_model.clone()));
     ui.set_jobs(ModelRc::from(jobs_model.clone()));
+    ui.set_app_title(findex_core::flavor::DISPLAY_NAME.into());
     let options = OptionsWindow::new().expect("create options window");
     options.on_apply(|o| with_app(|app| app.apply_options(&o)));
     options.on_restore_defaults(|| {
@@ -463,6 +464,11 @@ fn wire(ui: &AppWindow) {
     on!(on_link_answer, |app, yes| app.link_answer(yes));
     on!(on_send_to_phone, |app| app.send_to_phone());
     on!(on_unpair_confirmed, |app| app.unpair_confirmed());
+    on!(on_qr_close, |app| app.qr_close());
+    on!(on_pair_by_address, |app| {
+        app.qr_close();
+        app.pair_by_address()
+    });
     on!(on_send_to_phone_named, |app, n| app
         .send_to_phone_named(n.to_string()));
     ui.on_key(move |text, ctrl, shift, alt, typing| {

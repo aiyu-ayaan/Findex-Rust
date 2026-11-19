@@ -9,7 +9,7 @@ use std::path::Component;
 use std::sync::Arc;
 use std::sync::mpsc;
 
-use findex_core::FLAG_HIDDEN;
+use findex_core::{FLAG_HIDDEN, flavor};
 use findex_link::client::{Me, pair};
 use findex_link::discovery::{Discovery, Found};
 use findex_link::server::{Config, Event, PairPrompt, Server};
@@ -35,6 +35,34 @@ pub struct LinkState {
     tiles: Vec<(String, String)>,
     /// Phones waiting for the Unpair confirmation (dialog 9).
     unpairing: Vec<String>,
+    /// The one-time secret of the QR code on screen; the server accepts one pairing that presents it.
+    qr_secret: Arc<std::sync::Mutex<Option<String>>>,
+    /// Hides the QR code (and voids its secret) after [QR_TTL].
+    qr_timer: Timer,
+}
+
+/// How long a pairing QR code stays valid.
+const QR_TTL: Duration = Duration::from_secs(5 * 60);
+
+/// The QR code as an image: black modules on white, 4-module quiet zone, `scale` pixels per module.
+fn qr_image(text: &str, scale: u32) -> Option<Image> {
+    let code = qrcode::QrCode::new(text.as_bytes()).ok()?;
+    let n = code.width() as u32;
+    let colors = code.to_colors();
+    let side = (n + 8) * scale;
+    let mut buf = slint::SharedPixelBuffer::<slint::Rgb8Pixel>::new(side, side);
+    let width = side as usize;
+    for (i, px) in buf.make_mut_slice().iter_mut().enumerate() {
+        let (x, y) = ((i % width) as u32 / scale, (i / width) as u32 / scale);
+        let dark = x >= 4
+            && y >= 4
+            && x < n + 4
+            && y < n + 4
+            && colors[((y - 4) * n + (x - 4)) as usize] == qrcode::Color::Dark;
+        let v = if dark { 0 } else { 255 };
+        *px = slint::Rgb8Pixel { r: v, g: v, b: v };
+    }
+    Some(Image::from_rgb8(buf))
 }
 
 pub fn phones_root() -> PathBuf {
@@ -106,14 +134,19 @@ impl RemoteList {
     }
 }
 
-/// This computer's name as phones show it.
+/// This computer's name as phones show it (with "(dev)" for the dev flavour).
 fn device_name() -> String {
-    std::env::var("COMPUTERNAME")
+    let name = std::env::var("COMPUTERNAME")
         .ok()
         .or_else(|| std::fs::read_to_string("/etc/hostname").ok())
         .map(|s| s.trim().to_string())
         .filter(|s| !s.is_empty())
-        .unwrap_or_else(|| "Findex PC".into())
+        .unwrap_or_else(|| "Findex PC".into());
+    if flavor::DEV {
+        format!("{name} (dev)")
+    } else {
+        name
+    }
 }
 
 /// The LAN address other devices would use (no packet is sent: UDP connect only picks a route).
@@ -291,7 +324,7 @@ impl App {
         if let Some(s) = self.link.server.take() {
             s.stop();
         }
-        let Some(dir) = Identity::default_dir() else {
+        let Some(dir) = Identity::default_dir(flavor::APP_DIR) else {
             return;
         };
         let store = self
@@ -303,10 +336,18 @@ impl App {
         if !self.settings.link_enabled {
             return;
         }
+        let qr = self.link.qr_secret.clone();
         std::thread::spawn(move || {
             let r = (|| -> io::Result<(Arc<Identity>, Server)> {
                 let identity = Arc::new(Identity::load_or_create(&dir)?);
-                let server = Server::start(server_config(identity.clone(), store))?;
+                // The dev flavour leaves 47100 to the installed Findex.
+                let port = if flavor::DEV {
+                    DEFAULT_PORT + 1
+                } else {
+                    DEFAULT_PORT
+                };
+                let server =
+                    Server::start_preferring(server_config(identity.clone(), store, qr), port)?;
                 Ok((identity, server))
             })();
             post(move |app| match r {
@@ -457,7 +498,8 @@ impl App {
             return;
         };
         let name = vpath.rsplit('/').next().unwrap_or("file").to_string();
-        let Some(dir) = dirs::cache_dir().map(|d| d.join("findex").join("phone").join(&phone))
+        let Some(dir) =
+            dirs::cache_dir().map(|d| d.join(flavor::APP_DIR).join("phone").join(&phone))
         else {
             return;
         };
@@ -691,7 +733,56 @@ impl App {
 
     // ---------------- pairing ----------------
 
+    /// "Pair a phone": a QR code for the phone to scan, with pairing by address as the fallback.
     pub(super) fn pair_phone(&mut self) {
+        if !self.settings.link_enabled {
+            return self.toast(
+                "Turn on Phones in Options > Findex to pair a phone.".into(),
+                false,
+            );
+        }
+        let (Some(identity), Some(server)) = (&self.link.identity, &self.link.server) else {
+            return self.toast("Findex Link is still starting. Try again.".into(), false);
+        };
+        let hosts = findex_link::qr::lan_addresses();
+        if hosts.is_empty() {
+            return self.pair_by_address();
+        }
+        let secret = findex_link::sas::token()[..32].to_string();
+        let uri = findex_link::qr::PairUri {
+            id: identity.id(),
+            hosts: hosts.clone(),
+            port: server.port,
+            secret: secret.clone(),
+            name: device_name(),
+        };
+        let Some(image) = qr_image(&uri.to_uri(), 6) else {
+            return self.pair_by_address();
+        };
+        *self.link.qr_secret.lock().unwrap() = Some(secret);
+        self.ui.set_qr_image(image);
+        self.ui.set_qr_caption(
+            format!(
+                "Or pair by address: {}:{}. The code works once and expires in 5 minutes.",
+                hosts[0], server.port
+            )
+            .into(),
+        );
+        self.ui.set_qr_visible(true);
+        self.ui.invoke_focus_qr();
+        self.link.qr_timer.start(TimerMode::SingleShot, QR_TTL, || {
+            with_app(|app| app.qr_close())
+        });
+    }
+
+    /// Hides the QR code and voids its secret.
+    pub(super) fn qr_close(&mut self) {
+        *self.link.qr_secret.lock().unwrap() = None;
+        self.link.qr_timer.stop();
+        self.ui.set_qr_visible(false);
+    }
+
+    pub(super) fn pair_by_address(&mut self) {
         if !self.settings.link_enabled {
             return self.toast(
                 "Turn on Phones in Options > Findex to pair a phone.".into(),
@@ -839,6 +930,7 @@ impl App {
                 self.toast(format!("{from} sent text (copied): {preview}"), false);
             }
             Event::Paired(p) => {
+                self.qr_close();
                 self.toast(format!("Paired with {}", p.name), false);
                 self.link_sync();
             }
@@ -920,7 +1012,11 @@ impl App {
     }
 }
 
-fn server_config(identity: Arc<Identity>, store: Arc<Store>) -> Config {
+fn server_config(
+    identity: Arc<Identity>,
+    store: Arc<Store>,
+    qr_secret: Arc<std::sync::Mutex<Option<String>>>,
+) -> Config {
     let home = dirs::home_dir().unwrap_or_default();
     let inbox = dirs::download_dir()
         .unwrap_or_else(|| home.join("Downloads"))
@@ -947,6 +1043,7 @@ fn server_config(identity: Arc<Identity>, store: Arc<Store>) -> Config {
             });
             ok
         }),
+        qr_secret,
     }
 }
 
@@ -997,5 +1094,16 @@ mod tests {
         let taken = ["a.txt", "a (2).txt"];
         assert_eq!(free_name("a.txt", &mut |n| taken.contains(&n)), "a (3).txt");
         assert_eq!(free_name("b", &mut |n| taken.contains(&n)), "b");
+    }
+}
+
+#[cfg(test)]
+mod qr_tests {
+    #[test]
+    fn renders_a_square_qr_image() {
+        let img = super::qr_image("findex://pair?v=1", 4).unwrap();
+        let size = img.size();
+        assert_eq!(size.width, size.height);
+        assert!(size.width >= (21 + 8) * 4);
     }
 }

@@ -4,11 +4,14 @@ use std::io::{BufRead, BufReader, Read, Write};
 use std::os::unix::net::{UnixListener, UnixStream};
 use std::path::PathBuf;
 
+use findex_core::flavor::APP_DIR as APP;
+
+/// One socket per flavour, so a dev build never hands its window to the installed Findex.
 fn socket_path() -> PathBuf {
     match std::env::var_os("XDG_RUNTIME_DIR") {
-        Some(d) if !d.is_empty() => PathBuf::from(d).join("findex.sock"),
+        Some(d) if !d.is_empty() => PathBuf::from(d).join(format!("{APP}.sock")),
         _ => PathBuf::from(format!(
-            "/tmp/findex-{}.sock",
+            "/tmp/{APP}-{}.sock",
             rustix::process::getuid().as_raw()
         )),
     }
@@ -61,7 +64,10 @@ fn serve_dbus(on_request: std::sync::Arc<dyn Fn(String) + Send + Sync>) {
 /// Starts accepting requests from later instances; `on_request` runs on a worker thread.
 pub fn listen(on_request: impl Fn(String) + Send + Sync + 'static) {
     let on_request: std::sync::Arc<dyn Fn(String) + Send + Sync> = std::sync::Arc::new(on_request);
-    serve_dbus(on_request.clone());
+    // The well-known name belongs to the installed Findex; a dev build must not take it over.
+    if !findex_core::flavor::DEV {
+        serve_dbus(on_request.clone());
+    }
     listen_socket(on_request);
 }
 

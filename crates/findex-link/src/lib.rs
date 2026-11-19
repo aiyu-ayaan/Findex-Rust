@@ -11,6 +11,7 @@ pub mod client;
 pub mod discovery;
 pub mod http;
 pub mod identity;
+pub mod qr;
 pub mod sas;
 pub mod server;
 pub mod store;

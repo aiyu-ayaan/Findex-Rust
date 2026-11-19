@@ -64,6 +64,8 @@ Cold start < 150 ms. 100k-entry folder first rows < 80 ms, complete < 600 ms. 60
 
 ## Working rules for this repo
 
+- Debug builds are the **dev flavour** (`findex_core::flavor`): own config dir `findex-dev`, own socket, no FileManager1 name, no `--set-default`. Anything new that is per-install (files, sockets, ports, bus names) must go through `flavor::APP_DIR` / `flavor::DEV`.
+
 - Commits: Conventional Commits, one logical stage per commit, **no co-author trailers**. Check `git log` before committing to follow the existing style.
 - Do not commit `.codegraph/` or `.claude/settings.local.json` (already ignored).
 - Docs are English. Keep them factual; tag unverified claims.
